@@ -77,7 +77,12 @@ struct HexMapView: PlatformViewRepresentable {
             for group in groupedByRegion(polygons) {
                 let overlay = ShadedCells(group)
                 overlay.level = level
-                map.addOverlay(overlay, level: .aboveRoads)
+                // Everything sits above Apple's labels (see setBase), with place names on top.
+                if let places = coordinator.places {
+                    map.insertOverlay(overlay, below: places)
+                } else {
+                    map.addOverlay(overlay, level: .aboveLabels)
+                }
                 coordinator.hexOverlays.append(overlay)
             }
         }
@@ -102,6 +107,7 @@ struct HexMapView: PlatformViewRepresentable {
         coordinator.appleMap = appleMap
         map.removeOverlays(coordinator.baseOverlays)
         coordinator.baseOverlays = []
+        coordinator.places = nil
         if appleMap {
             map.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .realistic)
             map.pointOfInterestFilter = .includingAll
@@ -114,19 +120,22 @@ struct HexMapView: PlatformViewRepresentable {
         // The blank background goes in at once, so no Apple tiles load while
         // the bundled data (up to tens of MB) is read in the background.
         let blank = BlankTiles()
-        map.insertOverlay(blank, at: 0, level: .aboveRoads)
+        // At the "above labels" level, the blank background covers Apple's
+        // labels too, not just its map; everything else goes above it.
+        map.insertOverlay(blank, at: 0, level: .aboveLabels)
         coordinator.baseOverlays = [blank]
         Basemap.whenLoaded { [weak map, weak coordinator] basemap in
             guard let map, let coordinator, coordinator.appleMap == false,
                   coordinator.baseOverlays.count == 1 else { return }
             // Cells sit above the outlines; place names go on top of everything.
             for (offset, overlay) in basemap.overlays.enumerated() {
-                map.insertOverlay(overlay, at: offset + 1, level: .aboveRoads)
+                map.insertOverlay(overlay, at: offset + 1, level: .aboveLabels)
             }
             coordinator.baseOverlays += basemap.overlays
             if let places = basemap.places {
                 map.addOverlay(places, level: .aboveLabels)
                 coordinator.baseOverlays.append(places)
+                coordinator.places = places
             }
         }
     }
@@ -142,6 +151,8 @@ struct HexMapView: PlatformViewRepresentable {
         var appleMap: Bool?
         var hexOverlays: [MKOverlay] = []
         var baseOverlays: [MKOverlay] = []
+        /// The place-name overlay, kept on top of the cells.
+        var places: MKOverlay?
         var onSelect: (CellSummary?) -> Void
 
         init(onSelect: @escaping (CellSummary?) -> Void) { self.onSelect = onSelect }
