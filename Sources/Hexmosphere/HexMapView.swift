@@ -146,7 +146,7 @@ struct HexMapView: PlatformViewRepresentable {
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var binned = Binned()
-        var size = CellSize.r9
+        var size = CellSize.r7
         var fittedToken = -1
         var appleMap: Bool?
         var hexOverlays: [MKOverlay] = []

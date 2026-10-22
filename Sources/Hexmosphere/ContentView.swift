@@ -7,7 +7,7 @@ struct ContentView: View {
     @State private var samples: [Sample] = []
     @State private var tally = ImportTally()
     @State private var busy = false
-    @State private var size = CellSize.r9
+    @State private var size = CellSize.r7
     @State private var backend = H3Backend.h3o
     /// Off by default: the bundled base map, and no map tiles fetched from Apple.
     @State private var appleMap = false

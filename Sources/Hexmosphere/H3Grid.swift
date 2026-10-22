@@ -22,8 +22,8 @@ enum H3Backend: String, CaseIterable, Identifiable {
 }
 
 /// Odd resolutions only, each about 7x finer across (49x in area) than the last:
-/// 3 (about 120 km, region), 5 (about 17 km, metro area), 7 (about 2.4 km, town),
-/// 9 (about 350 m, neighbourhood, the default) and 11 (about 50 m, building).
+/// 3 (about 120 km, region), 5 (about 17 km, metro area), 7 (about 2.4 km, town, the default),
+/// 9 (about 350 m, neighbourhood) and 11 (about 50 m, building).
 /// The coarse sizes keep a library spread across continents visible when zoomed
 /// out. In solstone's tests (solstone-journal #397) 11 was borderline against
 /// the 50 m place rule and 12 broke down.

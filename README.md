@@ -14,8 +14,8 @@ Odd H3 resolutions only, so each choice is about 7× finer across (49× in area)
 | --- | --- | --- |
 | 3 | about 120 km | region |
 | 5 | about 17 km | metro area |
-| 7 | about 2.4 km | town |
-| 9 | about 350 m | neighbourhood; the default |
+| 7 | about 2.4 km | town; the default |
+| 9 | about 350 m | neighbourhood |
 | 11 | about 50 m | building |
 
 The sizes come out of a hexagon map prototype for [solstone](https://github.com/solpbc/solstone-journal/issues/397). In those tests, resolution 10 with a one-ring lookup matched a 50 m place rule, 11 was borderline, and 12 broke down. Resolutions 3 and 5 are for libraries spread across countries or continents, where finer cells are smaller than a pixel when the map is zoomed out far enough to show them all.
