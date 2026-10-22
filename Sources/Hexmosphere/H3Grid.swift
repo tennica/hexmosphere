@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Thin Swift wrappers over two H3 implementations, and the binning of samples into cells.
 // Both are built in and chosen at runtime: the h3o Rust library (Packages/h3o-ffi)
-// or Uber's H3 C library (Packages/CH3). They give identical cells and outlines,
-// but H3 C 4.1.0's average edge lengths are about 13% smaller, which changes the
-// size labels and the accuracy cut-off. The backend is always passed explicitly,
-// so background binning can't mix the two.
+// or Uber's H3 C library 4.5.0 (Packages/CH3), the reference implementation.
+// They agree on cells, outlines and edge lengths; the switch is there to compare
+// an independent implementation with the reference. The backend is always passed
+// explicitly, so background binning can't mix the two.
 
 import CH3
 import CH3O

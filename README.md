@@ -101,12 +101,12 @@ Both H3 implementations are built in, and the **h3o / H3 C** switch in the toolb
 
 | Choice | Library |
 | --- | --- |
-| `h3o` (default) | [h3o](https://github.com/HydroniumLabs/h3o) 0.8.0, Rust, through `Packages/h3o-ffi` |
-| `H3 C` | [Uber's H3](https://github.com/uber/h3) C library 4.1.0, `Packages/CH3` |
+| `h3o` (default) | [h3o](https://github.com/HydroniumLabs/h3o) 0.8.0: an independent, pure-Rust implementation, through `Packages/h3o-ffi` |
+| `H3 C` | [Uber's H3](https://github.com/uber/h3) C library 4.5.0, the reference implementation, in `Packages/CH3` |
 
-The two give identical cells and outlines: a comparison on 100,000 random points at resolutions 7, 9 and 11 found no differing cells, and vertex differences below 10⁻¹² degrees.
+They agree. A comparison on 100,000 random points at resolutions 7, 9 and 11 found no differing cells and no differing outline vertex counts, with vertex differences below 10⁻¹² degrees. Average edge lengths match at every resolution from 0 to 15, to within a millionth of a metre. The summary line names the library in use.
 
-Their average edge lengths differ, though. H3 C 4.1.0's are about 13% smaller (174.4 m against 200.8 m at resolution 9). So switching relabels the sizes (about 2.4 km / 350 m / 50 m with h3o, about 2.1 km / 300 m / 40 m with H3 C) and moves the accuracy cut-off; the hexagons themselves stay put. The summary line names the library in use.
+An earlier version of this project vendored H3 C 4.1.0. Its average edge lengths were the older table, about 13% smaller, which H3 replaced in March 2023 ([uber/h3#749](https://github.com/uber/h3/pull/749)). h3o already had the current values.
 
 Building needs the Rust part either way: `Packages/h3o-ffi/build-xcframework.sh`, with a rustup toolchain that has `aarch64-apple-ios`.
 
@@ -118,7 +118,7 @@ Building needs the Rust part either way: `Packages/h3o-ffi/build-xcframework.sh`
   - `HexMapView.swift`: MapKit, with one multipolygon per shade level
   - `ContentView.swift`: controls and summary
 - `Packages/h3o-ffi`: a small Rust crate exposing three h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
-- `Packages/CH3`: Uber's H3 v4.1.0 C library, vendored unchanged as a SwiftPM C target (Apache-2.0; `LICENSE-h3`). `include/h3api.h` is generated from `h3api.h.in` with the version filled in. Source: the v4.1.0 release tarball, sha256 `ec99f1f5974846bde64f4513cf8d2ea1b8d172d2218ab41803bf6a63532272bc`.
+- `Packages/CH3`: Uber's H3 v4.5.0 C library, vendored unchanged as a SwiftPM C target (Apache-2.0; `LICENSE-h3`). `include/h3api.h` is generated from `h3api.h.in` with the version filled in. Source: the v4.5.0 release tarball, sha256 `0da8a392a6ff77e76b60e6a331a49497d0935b6b7b6899da7a3e2786139b0441`.
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
 - `Basemap/`: the offline base map data, fetched by `scripts/fetch-basemap.sh` and drawn by `Sources/Hexmosphere/Basemap.swift`:
   - `naturalearth/`: public domain

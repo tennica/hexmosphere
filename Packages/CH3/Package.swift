@@ -1,5 +1,5 @@
 // swift-tools-version:5.9
-// Uber's H3 v4.1.0 C library (Apache-2.0), vendored as a SwiftPM C target.
+// Uber's H3 v4.5.0 C library (Apache-2.0), vendored as a SwiftPM C target.
 import PackageDescription
 
 let package = Package(

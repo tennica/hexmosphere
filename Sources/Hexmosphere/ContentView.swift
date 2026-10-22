@@ -39,7 +39,7 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .fixedSize()
-                .help("Which H3 library makes the cells. They agree on every cell; their edge lengths, and so the size labels and accuracy cut-off, differ by about 13%.")
+                .help("Which H3 library makes the cells: h3o, an independent Rust implementation, or Uber's H3 C, the reference. They agree on every cell and edge length.")
                 Toggle("Apple map", isOn: $appleMap)
                     .help("Show Apple's street map. This fetches map tiles from Apple for the areas you view.")
                 Button("Fit all") { fitToken += 1 }
