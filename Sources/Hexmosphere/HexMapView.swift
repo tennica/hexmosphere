@@ -22,8 +22,6 @@ struct HexMapView: PlatformViewRepresentable {
     /// Apple's street map when true; otherwise the bundled offline base map,
     /// and MapKit fetches no tiles.
     let appleMap: Bool
-    /// Bumped to ask the map to fit all cells again.
-    let fitToken: Int
     let onSelect: (CellSummary?) -> Void
 
     static let levels = 6
@@ -87,16 +85,13 @@ struct HexMapView: PlatformViewRepresentable {
             }
         }
 
-        if coordinator.fittedToken != fitToken {
-            coordinator.fittedToken = fitToken
-            let rect = coordinator.hexOverlays.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
-            if !rect.isNull {
-                #if os(macOS)
-                let padding = NSEdgeInsets(top: 40, left: 40, bottom: 40, right: 40)
-                #else
-                let padding = UIEdgeInsets(top: 40, left: 40, bottom: 40, right: 40)
-                #endif
-                map.setVisibleMapRect(rect, edgePadding: padding, animated: true)
+        // MapKit doesn't always draw overlays added to tiles already on screen
+        // until the map moves, so ask every cell renderer to draw once the
+        // renderers exist (MapKit creates them after this returns).
+        let added = coordinator.hexOverlays
+        DispatchQueue.main.async { [weak map] in
+            for overlay in added {
+                map?.renderer(for: overlay)?.setNeedsDisplay()
             }
         }
     }
@@ -147,7 +142,6 @@ struct HexMapView: PlatformViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate {
         var binned = Binned()
         var size = CellSize.r7
-        var fittedToken = -1
         var appleMap: Bool?
         var hexOverlays: [MKOverlay] = []
         var baseOverlays: [MKOverlay] = []

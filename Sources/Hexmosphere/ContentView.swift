@@ -11,7 +11,6 @@ struct ContentView: View {
     @State private var backend = H3Backend.h3o
     /// Off by default: the bundled base map, and no map tiles fetched from Apple.
     @State private var appleMap = false
-    @State private var fitToken = 0
     @State private var selected: CellSummary?
     /// Recomputed off the main thread when the photos or the cell size change,
     /// so a whole library doesn't stall every redraw.
@@ -25,8 +24,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                // The whole library is the only source for now, on Mac and iPad alike.
-                // (Choosing individual photos or files is in MediaLocations.swift, unused.)
+                // The whole library is the only source, on Mac and iPad alike.
                 Button { Task { await useLibrary() } } label: { Label("Whole Library…", systemImage: "photo.stack") }
                     .help("Read where every photo in your library was taken. Asks for Photos access.")
                 Button("Clear") { samples = []; tally = ImportTally(); selected = nil; libraryError = nil }
@@ -45,13 +43,12 @@ struct ContentView: View {
                 .help("Which H3 library makes the cells: h3o, an independent Rust implementation, or Uber's H3 C, the reference. They agree on every cell and edge length.")
                 Toggle("Apple map", isOn: $appleMap)
                     .help("Show Apple's street map. This fetches map tiles from Apple for the areas you view.")
-                Button("Fit all") { fitToken += 1 }
                 Spacer()
             }
             .padding(10)
 
             ZStack(alignment: .bottomLeading) {
-                HexMapView(binned: binned, size: size, appleMap: appleMap, fitToken: fitToken) { selected = $0 }
+                HexMapView(binned: binned, size: size, appleMap: appleMap) { selected = $0 }
                 if let selected {
                     CellCard(cell: selected).padding(12)
                 }
@@ -112,7 +109,6 @@ struct ContentView: View {
             samples = found
             tally = counts
             selected = nil
-            fitToken += 1
         } catch {
             libraryError = error.localizedDescription
         }
