@@ -1,6 +1,6 @@
 # Hexmosphere
 
-A Mac and iPad app that draws where your photos and videos were taken as [H3](https://h3geo.org) hexagons, shaded by how many days (or how many photos) fall in each.
+A Mac and iPad app that draws where your photos and videos were taken as [H3](https://h3geo.org) hexagons, shaded by how many photos fall in each.
 
 It reads only the photos you choose (with the Photos picker, or as files from a folder) and never asks for access to the whole library. Everything stays on the device.
 

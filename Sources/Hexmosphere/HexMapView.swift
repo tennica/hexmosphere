@@ -18,7 +18,6 @@ typealias PlatformViewRepresentable = UIViewRepresentable
 
 struct HexMapView: PlatformViewRepresentable {
     let binned: Binned
-    let shading: Shading
     let size: CellSize
     /// Apple's street map when true; otherwise the bundled offline base map,
     /// and MapKit fetches no tiles.
@@ -61,7 +60,7 @@ struct HexMapView: PlatformViewRepresentable {
         map.removeOverlays(coordinator.hexOverlays)
         coordinator.hexOverlays = []
 
-        let values = binned.cells.values.map { binned.value($0, shading) }
+        let values = binned.cells.values.map { binned.value($0) }
         guard let top = values.max(), top > 0 else { return }
         // Log scale, like the solstone prototype: a few very busy cells
         // shouldn't wash out everything else.
@@ -69,7 +68,7 @@ struct HexMapView: PlatformViewRepresentable {
         for cell in binned.cells.values {
             let corners = outline(of: cell.id)
             guard corners.count >= 3 else { continue }
-            let share = log(Double(binned.value(cell, shading)) + 1) / log(Double(top) + 1)
+            let share = log(Double(binned.value(cell)) + 1) / log(Double(top) + 1)
             let level = min(Self.levels - 1, Int(share * Double(Self.levels)))
             buckets[level].append(MKPolygon(coordinates: corners, count: corners.count))
         }

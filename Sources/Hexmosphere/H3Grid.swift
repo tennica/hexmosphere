@@ -104,20 +104,15 @@ struct CellSummary: Identifiable {
     var last = Date.distantPast
 }
 
-enum Shading: String, CaseIterable, Identifiable {
-    case days = "days with a photo"
-    case samples = "photos"
-    var id: String { rawValue }
-}
-
 struct Binned {
     var cells: [CellID: CellSummary] = [:]
     /// Samples whose reported accuracy is coarser than the cell, so they would
     /// land in a cell more or less at random (the same rule as solstone's map).
     var tooCoarse = 0
 
-    func value(_ cell: CellSummary, _ shading: Shading) -> Int {
-        shading == .days ? cell.days.count : cell.samples
+    /// What a cell is shaded by: how many photos fell in it.
+    func value(_ cell: CellSummary) -> Int {
+        cell.samples
     }
 }
 

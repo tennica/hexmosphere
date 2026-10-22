@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Controls for choosing photos, cell size and shading, the map, and a summary.
+// Controls for choosing photos and cell size, the map, and a summary.
 
 import PhotosUI
 import SwiftUI
@@ -11,7 +11,6 @@ struct ContentView: View {
     @State private var importing = false
     @State private var busy = false
     @State private var size = CellSize.r9
-    @State private var shading = Shading.days
     /// Off by default: the bundled base map, and no map tiles fetched from Apple.
     @State private var appleMap = false
     @State private var fitToken = 0
@@ -36,10 +35,6 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 480)
-                Picker("Shade by", selection: $shading) {
-                    ForEach(Shading.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .frame(maxWidth: 220)
                 Toggle("Apple map", isOn: $appleMap)
                     .help("Show Apple's street map. This fetches map tiles from Apple for the areas you view.")
                 Button("Fit all") { fitToken += 1 }
@@ -48,7 +43,7 @@ struct ContentView: View {
             .padding(10)
 
             ZStack(alignment: .bottomLeading) {
-                HexMapView(binned: binned, shading: shading, size: size, appleMap: appleMap, fitToken: fitToken) { selected = $0 }
+                HexMapView(binned: binned, size: size, appleMap: appleMap, fitToken: fitToken) { selected = $0 }
                 if let selected {
                     CellCard(cell: selected).padding(12)
                 }
