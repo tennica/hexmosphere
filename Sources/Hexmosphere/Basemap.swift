@@ -70,8 +70,9 @@ private let ice = (CGFloat(0.95), CGFloat(0.97), CGFloat(0.99))
 /// The Natural Earth layers the app draws, bottom to top, by name without the
 /// scale prefix. Other layers in the folders (countries, graticules, labels…)
 /// are cached but not drawn.
+/// The ocean isn't drawn: it is one world-sized polygon of about 61,000 points at
+/// 1:50m, redrawn for every tile, and the coastline already shows where land ends.
 let layerStyles: [(String, LayerStyle)] = [
-    ("ocean", .area(water)),
     ("glaciated_areas", .area(ice)),
     ("antarctic_ice_shelves_polys", .area(ice)),
     ("playas", .area((0.93, 0.89, 0.80))),
@@ -238,16 +239,35 @@ struct Basemap {
         }
         switch style.kind {
         case .line:
-            guard !polylines.isEmpty else { return [] }
-            let overlay = StyledLines(polylines)
-            overlay.style = style
-            return [overlay]
+            return chunked(polylines).map { group in
+                let overlay = StyledLines(group)
+                overlay.style = style
+                return overlay
+            }
         case .fill:
-            guard !polygons.isEmpty else { return [] }
-            let overlay = StyledAreas(polygons)
-            overlay.style = style
-            return [overlay]
+            return chunked(polygons).map { group in
+                let overlay = StyledAreas(group)
+                overlay.style = style
+                return overlay
+            }
         }
+    }
+
+    /// Splits a layer into regional groups on an 8×8 grid over the world, by
+    /// where each shape's middle falls. MapKit only draws an overlay on the
+    /// tiles its bounds touch, so a tile then draws its own region's shapes
+    /// instead of the whole world's.
+    private static func chunked<Shape: MKOverlay>(_ shapes: [Shape]) -> [[Shape]] {
+        let side = 8.0
+        let world = MKMapRect.world
+        var groups: [Int: [Shape]] = [:]
+        for shape in shapes {
+            let rect = shape.boundingMapRect
+            let column = min(Int(side) - 1, max(0, Int((rect.midX - world.minX) / world.width * side)))
+            let row = min(Int(side) - 1, max(0, Int((rect.midY - world.minY) / world.height * side)))
+            groups[row * Int(side) + column, default: []].append(shape)
+        }
+        return Array(groups.values)
     }
 
     private static func points(_ url: URL) -> [(CLLocationCoordinate2D, [String: Any])] {

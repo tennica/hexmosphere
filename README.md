@@ -71,7 +71,6 @@ The layers download once into `~/Library/Caches/hexmosphere/naturalearth/<versio
 
 For each layer, the app uses the finest scale it finds, 10m before 50m before 110m. It draws the layers it has a style for, from bottom to top:
 
-- ocean
 - glaciers and ice shelves
 - dry lake beds
 - urban areas
@@ -83,7 +82,7 @@ For each layer, the app uses the finest scale it finds, 10m before 50m before 11
 - maritime and disputed borders
 - land borders
 
-Other cached layers, such as country polygons, graticules and region labels, are left out. With the 50m set the app is about 60 MB. The base map loads in the background, so the window doesn't wait for it.
+Other cached layers, such as country polygons, graticules and region labels, are left out. So is the ocean: it's one world-sized polygon of about 61,000 points at 1:50m, and the coastline already shows where land ends. Each drawn layer is split into regional chunks on an 8×8 grid, so MapKit only draws the shapes near each tile. With the 50m set the app is about 60 MB. The base map loads in the background, so the window doesn't wait for it.
 
 ### More places
 
