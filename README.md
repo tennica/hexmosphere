@@ -105,6 +105,16 @@ scripts/fetch-basemap.sh places <name> <south> <west> <north> <east>
 
 Running the script with no arguments re-downloads the committed set: the Natural Earth layers above and the Colorado places.
 
+### Roads
+
+Roads aren't in the repository. To draw them, fetch Natural Earth's 1:10m roads before building:
+
+```bash
+scripts/fetch-basemap.sh roads    # 56,600 roads; about 50 MB cached, 5.8 MB bundled
+```
+
+This writes every road to `Basemap/roads/roads.bin` (gitignored), keeping only its kind, its line, and the zoom level Natural Earth suggests showing it from. Each map tile draws only the roads meant for its zoom: highways when zoomed out, smaller roads as you zoom in. Until the roads have proved affordable on every device, the summary line shows how long they took to load and the slowest tile draw so far.
+
 ## H3 backend (switch in the app)
 
 Both H3 implementations are built in, and the **h3o / H3 C** switch in the toolbar picks one:

@@ -55,6 +55,10 @@ struct HexMapView: PlatformViewRepresentable {
         coordinator.size = size
         coordinator.onSelect = onSelect
         setBase(map, coordinator)
+        // SwiftUI calls this for any change in the window; rebuild the cells
+        // only when they changed, or redrawing them can feed back into here.
+        guard coordinator.drawnID != binned.id else { return }
+        coordinator.drawnID = binned.id
         map.removeOverlays(coordinator.hexOverlays)
         coordinator.hexOverlays = []
 
@@ -143,6 +147,7 @@ struct HexMapView: PlatformViewRepresentable {
         var binned = Binned()
         var size = CellSize.r7
         var appleMap: Bool?
+        var drawnID: UUID?
         var hexOverlays: [MKOverlay] = []
         var baseOverlays: [MKOverlay] = []
         /// The place-name overlay, kept on top of the cells.

@@ -64,6 +64,11 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
+            if !appleMap {
+                RoadTimes()
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+            }
         }
         .onChange(of: size) { selected = nil; rebin() }
         .onChange(of: backend) { selected = nil; rebin() }
@@ -137,6 +142,34 @@ struct ContentView: View {
         #else
         return parts.joined(separator: " · ") + ". Tap a hexagon for details."
         #endif
+    }
+}
+
+/// Road load and draw times, on a line of their own: they change while tiles
+/// draw, and only this view should redraw when they do.
+struct RoadTimes: View {
+    private let stats = RoadStats.shared
+
+    var body: some View {
+        if let loadTime = stats.loadTime {
+            Text(text(loadTime))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func text(_ loadTime: Duration) -> String {
+        var text = "\(stats.roads.formatted()) roads loaded in \(milliseconds(loadTime))"
+        if stats.tiles > 0 {
+            text += " · slowest of \(stats.tiles.formatted()) road tiles \(milliseconds(stats.slowestTile)) (up to \(stats.busiestTile.formatted()) pieces)"
+        }
+        return text
+    }
+
+    private func milliseconds(_ duration: Duration) -> String {
+        let value = Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
+        return String(format: "%.1f ms", value)
     }
 }
 

@@ -116,6 +116,8 @@ struct CellSummary: Identifiable {
 }
 
 struct Binned {
+    /// New for every binning, so the map can tell when its cells need rebuilding.
+    var id = UUID()
     /// The backend these cells were made with, used again to draw and look them up.
     var backend = H3Backend.h3o
     var cells: [CellID: CellSummary] = [:]

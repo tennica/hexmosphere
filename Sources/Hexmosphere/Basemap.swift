@@ -271,7 +271,11 @@ struct Basemap {
         let layers = naturalEarthLayers(root)
         let land = landCells()
         basemap.overlays += land
+        let roadsURL = root.appendingPathComponent("roads/roads.bin")
+        let roads = FileManager.default.fileExists(atPath: roadsURL.path) ? Roads.load(roadsURL) : []
         for (name, style) in layerStyles {
+            // Roads go above water and rivers, below borders and other lines.
+            if name == "geographic_lines" { basemap.overlays += roads }
             // With the land drawn as hexagons, their edges are the coast.
             if !land.isEmpty && name == "coastline" { continue }
             guard let url = layers[name] else { continue }
@@ -372,6 +376,9 @@ func basemapRenderer(for overlay: MKOverlay) -> MKOverlayRenderer? {
     }
     if let places = overlay as? Places {
         return PlacesRenderer(places)
+    }
+    if let roads = overlay as? Roads {
+        return RoadsRenderer(roads)
     }
     if let lines = overlay as? StyledLines {
         let renderer = MKMultiPolylineRenderer(multiPolyline: lines)

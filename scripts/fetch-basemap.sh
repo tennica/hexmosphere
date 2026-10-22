@@ -14,6 +14,11 @@
 #   scripts/fetch-basemap.sh places <name> <south> <west> <north> <east>
 #       Add OpenStreetMap place names for a region (one Overpass API query).
 #
+#   scripts/fetch-basemap.sh roads
+#       Cache Natural Earth's 1:10m roads (about 50 MB, 56,600 roads) and write
+#       every road to Basemap/roads/roads.bin (gitignored), keeping only its kind,
+#       the zoom level Natural Earth suggests showing it from, and its line.
+#
 # Natural Earth is public domain; OpenStreetMap data is ODbL (Basemap/osm/LICENSE.md).
 # Downloads happen here, at build time; the app never asks anyone for map data
 # unless its Apple map is switched on.
@@ -41,6 +46,39 @@ features = [{
 } for f in data["features"] if f.get("geometry")]
 json.dump({"type": "FeatureCollection", "features": features}, open(path, "w"), separators=(",", ":"))
 PY
+}
+
+# roads.bin, little-endian: a uint32 road count, then for each road a uint8 kind
+# (0 major highway, 1 secondary highway, 2 other road, 3 ferry), a uint8 minimum
+# zoom × 10, a uint16 part count, and for each part a uint32 point count followed
+# by that many float32 (longitude, latitude) pairs.
+fetch_roads() {
+  local cache=${HEXMOSPHERE_CACHE:-$HOME/Library/Caches/hexmosphere}/naturalearth/$NE_VERSION/10m
+  mkdir -p "$cache" Basemap/roads
+  if [ ! -s "$cache/ne_10m_roads.geojson" ]; then
+    curl -fsSL -A "$UA" "$NE_RAW/ne_10m_roads.geojson" -o "$cache/ne_10m_roads.geojson.part"
+    mv "$cache/ne_10m_roads.geojson.part" "$cache/ne_10m_roads.geojson"
+  fi
+  python3 -I - "$cache/ne_10m_roads.geojson" Basemap/roads/roads.bin <<'PY'
+import json, struct, sys
+kinds = {"Major Highway": 0, "Beltway": 0, "Bypass": 0, "Secondary Highway": 1,
+         "Ferry Route": 3, "Ferry, seasonal": 3}
+roads = [r for r in json.load(open(sys.argv[1]))["features"] if r.get("geometry")]
+points = 0
+with open(sys.argv[2], "wb") as out:
+    out.write(struct.pack("<I", len(roads)))
+    for road in roads:
+        properties, geometry = road["properties"], road["geometry"]
+        parts = geometry["coordinates"] if geometry["type"] == "MultiLineString" else [geometry["coordinates"]]
+        out.write(struct.pack("<BBH", kinds.get(properties.get("type"), 2),
+                              round(float(properties.get("min_zoom") or 0) * 10), len(parts)))
+        for part in parts:
+            out.write(struct.pack("<I", len(part)))
+            out.write(struct.pack(f"<{len(part) * 2}f", *(c for point in part for c in point[:2])))
+            points += len(part)
+print(f"roads: {len(roads)} roads, {points} points")
+PY
+  du -h Basemap/roads/roads.bin
 }
 
 fetch_places() {
@@ -118,5 +156,6 @@ case "${1:-}" in
     ;;
   naturalearth) fetch_scale "${2:?scale: 110m, 50m or 10m}" ;;
   places) shift; fetch_places "$@" ;;
-  *) echo "usage: $0 [naturalearth <110m|50m|10m> | places <name> <south> <west> <north> <east>]" >&2; exit 2 ;;
+  roads) fetch_roads ;;
+  *) echo "usage: $0 [naturalearth <110m|50m|10m> | places <name> <south> <west> <north> <east> | roads]" >&2; exit 2 ;;
 esac
