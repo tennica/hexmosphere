@@ -8,6 +8,7 @@ This product includes:
   Apache License 2.0 (Packages/CH3/LICENSE-h3), vendored unchanged from v4.5.0.
 - h3o (https://github.com/HydroniumLabs/h3o), BSD-3-Clause, fetched by Cargo
   when building Packages/h3o-ffi.
-- Natural Earth (https://www.naturalearthdata.com), public domain, in Basemap/naturalearth.
+- Natural Earth (https://www.naturalearthdata.com), public domain, in Basemap/naturalearth,
+  and the land cells derived from it in Basemap/h3.
 - OpenStreetMap data, © OpenStreetMap contributors, Open Database License 1.0,
   in Basemap/osm (see Basemap/osm/LICENSE.md).

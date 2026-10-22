@@ -57,6 +57,14 @@ By default the map shows **no Apple map content and fetches no tiles**. Instead 
 
 The **Apple map** toggle switches to Apple's full street map, with realistic elevation. That fetches tiles from Apple for whatever area is on screen, so Apple can infer which places you're looking at.
 
+### Land as H3 cells
+
+The land is drawn as H3 hexagons on an ocean-blue background. `scripts/build-land-cells.sh [resolution]` fills Natural Earth's 1:50m land polygons with H3 cells using the vendored H3 C library, then compacts them: groups of seven merge into their parent wherever possible. It writes `Basemap/h3/land-r<res>.cells`, a list of little-endian uint64 cell indexes.
+
+The committed file is resolution 5. Its 569,665 cells (about 144 million km², close to Earth's land area) compact to 37,531, about 300 KB. Coastlines stay at resolution 5 (about 15 km across) while continental interiors use cells up to resolution 0. Antarctica wraps all 360° and reaches the pole, which H3's polygon fill can't handle, so the script cuts it into 30° wedges first.
+
+With land cells present, the Natural Earth coastline isn't drawn, since the hexagon edges are the coast.
+
 ### More detail: caching larger Natural Earth sets
 
 The repository carries only the small set above. To build with more, cache a whole Natural Earth scale first:
@@ -124,6 +132,7 @@ Building needs the Rust part either way: `Packages/h3o-ffi/build-xcframework.sh`
   - `naturalearth/`: public domain
   - `naturalearth-extra/`: local caches only, gitignored
   - `osm/`: ODbL, with its own `LICENSE.md`
+- `tools/landcells.c`: the land-filling tool, built and run by `scripts/build-land-cells.sh`
 - `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiPad` for iPadOS)
 
 ## Ideas for later

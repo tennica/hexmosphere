@@ -9,6 +9,7 @@ import Foundation
 import ImageIO
 import MapKit
 import UniformTypeIdentifiers
+import CH3
 
 #if os(macOS)
 import AppKit
@@ -27,7 +28,11 @@ final class BlankTiles: MKTileOverlay {
         let size = 256
         let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        context.setFillColor(red: 0.965, green: 0.953, blue: 0.933, alpha: 1)
+        if Basemap.landCellsURL != nil {
+            context.setFillColor(red: 0.84, green: 0.89, blue: 0.94, alpha: 1)  // ocean
+        } else {
+            context.setFillColor(red: 0.965, green: 0.953, blue: 0.933, alpha: 1)  // paper
+        }
         context.fill(CGRect(x: 0, y: 0, width: size, height: size))
         let data = NSMutableData()
         let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)!
@@ -176,6 +181,28 @@ func groupedByRegion<Shape: MKOverlay>(_ shapes: [Shape]) -> [[Shape]] {
     return Array(groups.values)
 }
 
+// MARK: - Land as H3 cells
+
+/// A cell's outline as a map polygon. Cells that straddle the 180° meridian get
+/// their western vertices shifted one world-width east, so MapKit draws them in
+/// place instead of stretched across the whole map.
+func cellPolygon(_ cell: UInt64) -> MKPolygon? {
+    var boundary = CellBoundary()
+    guard cellToBoundary(cell, &boundary) == 0, boundary.numVerts >= 3 else { return nil }
+    let count = Int(boundary.numVerts)
+    var points: [MKMapPoint] = withUnsafeBytes(of: &boundary.verts) { raw in
+        let vertices = raw.bindMemory(to: LatLng.self)
+        return (0..<count).map {
+            MKMapPoint(CLLocationCoordinate2D(latitude: radsToDegs(vertices[$0].lat), longitude: radsToDegs(vertices[$0].lng)))
+        }
+    }
+    let xs = points.map(\.x)
+    if let low = xs.min(), let high = xs.max(), high - low > MKMapRect.world.width / 2 {
+        points = points.map { $0.x < MKMapRect.world.width / 2 ? MKMapPoint(x: $0.x + MKMapRect.world.width, y: $0.y) : $0 }
+    }
+    return MKPolygon(points: points, count: points.count)
+}
+
 // MARK: - Loading
 
 struct Basemap {
@@ -215,11 +242,38 @@ struct Basemap {
         return best.mapValues(\.1)
     }
 
+    /// The precomputed land cells (scripts/build-land-cells.sh), if bundled.
+    static let landCellsURL: URL? = {
+        guard let dir = Bundle.main.url(forResource: "Basemap", withExtension: nil)?.appendingPathComponent("h3") else { return nil }
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "cells" && $0.lastPathComponent.hasPrefix("land-") }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }.last
+    }()
+
+    /// Land drawn as compacted H3 cells, in paper colour on the ocean-blue background.
+    private static func landCells() -> [MKOverlay] {
+        guard let url = landCellsURL, let data = try? Data(contentsOf: url) else { return [] }
+        let cells: [UInt64] = data.withUnsafeBytes { raw in
+            (0..<(raw.count / 8)).map { UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: $0 * 8, as: UInt64.self)) }
+        }
+        let polygons = cells.compactMap(cellPolygon)
+        let style = LayerStyle.area((0.965, 0.953, 0.933), edge: (0.80, 0.78, 0.74))
+        return groupedByRegion(polygons).map { group in
+            let overlay = StyledAreas(group)
+            overlay.style = LayerStyle(kind: .fill, stroke: style.stroke, fill: style.fill, width: 0.3, dash: nil)
+            return overlay
+        }
+    }
+
     static func load() -> Basemap {
         guard let root = Bundle.main.url(forResource: "Basemap", withExtension: nil) else { return Basemap() }
         var basemap = Basemap()
         let layers = naturalEarthLayers(root)
+        let land = landCells()
+        basemap.overlays += land
         for (name, style) in layerStyles {
+            // With the land drawn as hexagons, their edges are the coast.
+            if !land.isEmpty && name == "coastline" { continue }
             guard let url = layers[name] else { continue }
             basemap.overlays += overlays(url, style)
         }
