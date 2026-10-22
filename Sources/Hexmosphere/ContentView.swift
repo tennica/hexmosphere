@@ -16,6 +16,9 @@ struct ContentView: View {
     /// Recomputed off the main thread when the photos or the cell size change,
     /// so a whole library doesn't stall every redraw.
     @State private var binned = Binned()
+    /// How long the last library read and the last binning took, for the summary line.
+    @State private var readTime: Duration?
+    @State private var binTime: Duration?
     @State private var libraryProgress: (Int, Int)?
     @State private var libraryError: String?
 
@@ -75,13 +78,24 @@ struct ContentView: View {
         return "Reading the library… \(done.formatted()) of \(total.formatted())"
     }
 
+    private func seconds(_ duration: Duration) -> String {
+        let value = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+        return value < 1 ? String(format: "%.0f ms", value * 1000) : String(format: "%.2f s", value)
+    }
+
     private func rebin() {
         let samples = samples, size = size, backend = backend
         Task {
-            let result = await Task.detached(priority: .userInitiated) {
-                bin(samples, size: size, backend: backend)
+            let (result, took) = await Task.detached(priority: .userInitiated) {
+                let clock = ContinuousClock()
+                var result = Binned()
+                let took = clock.measure { result = bin(samples, size: size, backend: backend) }
+                return (result, took)
             }.value
-            if size == self.size && backend == self.backend { binned = result }
+            if size == self.size && backend == self.backend {
+                binned = result
+                binTime = took
+            }
         }
     }
 
@@ -92,7 +106,9 @@ struct ContentView: View {
         libraryProgress = (0, 0)
         defer { busy = false; libraryProgress = nil }
         do {
+            let started = ContinuousClock.now
             let (found, counts) = try await readLibrary { done, total in libraryProgress = (done, total) }
+            readTime = ContinuousClock.now - started
             samples = found
             tally = counts
             selected = nil
@@ -118,7 +134,8 @@ struct ContentView: View {
         if binned.tooCoarse > 0 {
             parts.append("\(binned.tooCoarse) left out: position not known well enough for this size")
         }
-        parts.append(backend.name)
+        if let readTime { parts.append("library read in \(seconds(readTime))") }
+        if let binTime { parts.append("binned in \(seconds(binTime)) with \(backend.name)") } else { parts.append(backend.name) }
         if !appleMap { parts.append(basemapCredit) }
         #if os(macOS)
         return parts.joined(separator: " · ") + ". Click a hexagon for details."
