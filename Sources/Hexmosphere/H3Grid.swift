@@ -43,11 +43,15 @@ enum CellSize: Int, CaseIterable, Identifiable {
 
     /// Distance across a hexagon between flat sides (edge × √3), as in solstone's labels.
     var label: String {
-        let across = edgeMetres * 3.0.squareRoot()
-        let text = across >= 1000
-            ? String(format: "%.1f km", across / 1000)
-            : "\(Int((across / 10).rounded() * 10)) m"
-        return "about \(text) (res \(rawValue))"
+        "about \(across) (res \(rawValue))"
+    }
+
+    /// Just the distance, for the size buttons, where space is tight on iPad.
+    var across: String {
+        let metres = edgeMetres * 3.0.squareRoot()
+        return metres >= 1000
+            ? String(format: "%.1f km", metres / 1000)
+            : "\(Int((metres / 10).rounded() * 10)) m"
     }
 }
 

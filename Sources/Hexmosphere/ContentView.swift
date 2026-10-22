@@ -37,10 +37,10 @@ struct ContentView: View {
                     .disabled(samples.isEmpty && tally.chosen == 0)
                 Divider().frame(height: 20)
                 Picker("Cell size", selection: $size) {
-                    ForEach(CellSize.allCases) { Text($0.label).tag($0) }
+                    ForEach(CellSize.allCases) { Text($0.across).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .frame(maxWidth: 480)
+                .fixedSize()
                 Toggle("Apple map", isOn: $appleMap)
                     .help("Show Apple's street map. This fetches map tiles from Apple for the areas you view.")
                 Button("Fit all") { fitToken += 1 }
