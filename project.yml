@@ -34,6 +34,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere
         SWIFT_VERSION: "5.0"
+        # One signed binary per build (no separate debug and preview dylibs), so
+        # signing asks for the keychain key once instead of three times.
+        ENABLE_DEBUG_DYLIB: NO
         # Build flag: h3o is the default; HEX_BACKEND=h3c on the xcodebuild
         # command line switches to Uber's H3 C library.
         HEX_BACKEND: h3o
@@ -72,6 +75,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere.ipad
         TARGETED_DEVICE_FAMILY: "2"
         SWIFT_VERSION: "5.0"
+        # One signed binary per build (no separate debug and preview dylibs), so
+        # signing asks for the keychain key once instead of three times.
+        ENABLE_DEBUG_DYLIB: NO
         # Build flag: h3o is the default; HEX_BACKEND=h3c on the xcodebuild
         # command line switches to Uber's H3 C library.
         HEX_BACKEND: h3o
