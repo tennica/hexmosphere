@@ -63,18 +63,14 @@ enum CellSize: Int, CaseIterable, Identifiable {
 typealias CellID = UInt64
 
 func cellFor(_ coordinate: CLLocationCoordinate2D, size: CellSize, backend: H3Backend) -> CellID? {
-    cellFor(coordinate, resolution: size.rawValue, backend: backend)
-}
-
-func cellFor(_ coordinate: CLLocationCoordinate2D, resolution: Int, backend: H3Backend) -> CellID? {
     switch backend {
     case .h3o:
-        let cell = h3o_cell_for(coordinate.latitude, coordinate.longitude, UInt8(resolution))
+        let cell = h3o_cell_for(coordinate.latitude, coordinate.longitude, UInt8(size.rawValue))
         return cell == 0 ? nil : cell
     case .h3c:
         var point = LatLng(lat: degsToRads(coordinate.latitude), lng: degsToRads(coordinate.longitude))
         var cell: H3Index = 0
-        guard latLngToCell(&point, Int32(resolution), &cell) == 0 else { return nil }
+        guard latLngToCell(&point, Int32(size.rawValue), &cell) == 0 else { return nil }
         return cell
     }
 }
@@ -126,10 +122,6 @@ struct Binned {
     /// Samples whose reported accuracy is coarser than the cell, so they would
     /// land in a cell more or less at random (the same rule as solstone's map).
     var tooCoarse = 0
-    /// The resolution-3 cell (about 120 km across) holding the most photos, which
-    /// the map zooms to.
-    var busiestRegion: CellID?
-    static let regionResolution = 3
 
     /// What a cell is shaded by: how many photos fell in it.
     func value(_ cell: CellSummary) -> Int {
@@ -140,7 +132,6 @@ struct Binned {
 func bin(_ samples: [Sample], size: CellSize, backend: H3Backend, calendar: Calendar = .current) -> Binned {
     var result = Binned(backend: backend)
     let edge = size.edgeMetres(backend)
-    var regions: [CellID: Int] = [:]
     for sample in samples {
         if let accuracy = sample.accuracy, accuracy > edge {
             result.tooCoarse += 1
@@ -153,10 +144,6 @@ func bin(_ samples: [Sample], size: CellSize, backend: H3Backend, calendar: Cale
         summary.first = min(summary.first, sample.date)
         summary.last = max(summary.last, sample.date)
         result.cells[cell] = summary
-        if let region = cellFor(sample.coordinate, resolution: Binned.regionResolution, backend: backend) {
-            regions[region, default: 0] += 1
-        }
     }
-    result.busiestRegion = regions.max { $0.value < $1.value }?.key
     return result
 }
