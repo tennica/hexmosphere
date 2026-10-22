@@ -22,11 +22,13 @@ enum H3Backend: String, CaseIterable, Identifiable {
 }
 
 /// Odd resolutions only, each about 7x finer across (49x in area) than the last:
-/// 7 (about 2.4 km, town scale), 9 (about 350 m, neighbourhood, the default) and
-/// 11 (about 50 m, building scale). In solstone's tests (solstone-journal #397)
-/// 11 was borderline against the 50 m place rule and 12 broke down.
+/// 3 (about 120 km, region), 5 (about 17 km, metro area), 7 (about 2.4 km, town),
+/// 9 (about 350 m, neighbourhood, the default) and 11 (about 50 m, building).
+/// The coarse sizes keep a library spread across continents visible when zoomed
+/// out. In solstone's tests (solstone-journal #397) 11 was borderline against
+/// the 50 m place rule and 12 broke down.
 enum CellSize: Int, CaseIterable, Identifiable {
-    case r7 = 7, r9 = 9, r11 = 11
+    case r3 = 3, r5 = 5, r7 = 7, r9 = 9, r11 = 11
 
     var id: Int { rawValue }
 
@@ -50,7 +52,9 @@ enum CellSize: Int, CaseIterable, Identifiable {
     /// Just the distance, for the size buttons, where space is tight on iPad.
     func across(_ backend: H3Backend) -> String {
         let metres = edgeMetres(backend) * 3.0.squareRoot()
-        return metres >= 1000
+        return metres >= 10_000
+            ? "\(Int((metres / 1000).rounded())) km"
+            : metres >= 1000
             ? String(format: "%.1f km", metres / 1000)
             : "\(Int((metres / 10).rounded() * 10)) m"
     }
