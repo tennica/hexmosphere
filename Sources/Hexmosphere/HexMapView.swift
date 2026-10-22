@@ -72,11 +72,14 @@ struct HexMapView: PlatformViewRepresentable {
             let level = min(Self.levels - 1, Int(share * Double(Self.levels)))
             buckets[level].append(MKPolygon(coordinates: corners, count: corners.count))
         }
+        // One overlay per shade level and region, so a tile only draws nearby cells.
         for (level, polygons) in buckets.enumerated() where !polygons.isEmpty {
-            let overlay = ShadedCells(polygons)
-            overlay.level = level
-            map.addOverlay(overlay, level: .aboveRoads)
-            coordinator.hexOverlays.append(overlay)
+            for group in groupedByRegion(polygons) {
+                let overlay = ShadedCells(group)
+                overlay.level = level
+                map.addOverlay(overlay, level: .aboveRoads)
+                coordinator.hexOverlays.append(overlay)
+            }
         }
 
         if coordinator.fittedToken != fitToken {

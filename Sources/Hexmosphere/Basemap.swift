@@ -159,6 +159,23 @@ final class PlacesRenderer: MKOverlayRenderer {
     }
 }
 
+/// Splits shapes into regional groups on an 8×8 grid over the world, by where
+/// each shape's middle falls. MapKit only draws an overlay on the tiles its
+/// bounds touch, so a tile then draws its own region's shapes instead of the
+/// whole world's.
+func groupedByRegion<Shape: MKOverlay>(_ shapes: [Shape]) -> [[Shape]] {
+    let side = 8.0
+    let world = MKMapRect.world
+    var groups: [Int: [Shape]] = [:]
+    for shape in shapes {
+        let rect = shape.boundingMapRect
+        let column = min(Int(side) - 1, max(0, Int((rect.midX - world.minX) / world.width * side)))
+        let row = min(Int(side) - 1, max(0, Int((rect.midY - world.minY) / world.height * side)))
+        groups[row * Int(side) + column, default: []].append(shape)
+    }
+    return Array(groups.values)
+}
+
 // MARK: - Loading
 
 struct Basemap {
@@ -239,13 +256,13 @@ struct Basemap {
         }
         switch style.kind {
         case .line:
-            return chunked(polylines).map { group in
+            return groupedByRegion(polylines).map { group in
                 let overlay = StyledLines(group)
                 overlay.style = style
                 return overlay
             }
         case .fill:
-            return chunked(polygons).map { group in
+            return groupedByRegion(polygons).map { group in
                 let overlay = StyledAreas(group)
                 overlay.style = style
                 return overlay
@@ -253,22 +270,6 @@ struct Basemap {
         }
     }
 
-    /// Splits a layer into regional groups on an 8×8 grid over the world, by
-    /// where each shape's middle falls. MapKit only draws an overlay on the
-    /// tiles its bounds touch, so a tile then draws its own region's shapes
-    /// instead of the whole world's.
-    private static func chunked<Shape: MKOverlay>(_ shapes: [Shape]) -> [[Shape]] {
-        let side = 8.0
-        let world = MKMapRect.world
-        var groups: [Int: [Shape]] = [:]
-        for shape in shapes {
-            let rect = shape.boundingMapRect
-            let column = min(Int(side) - 1, max(0, Int((rect.midX - world.minX) / world.width * side)))
-            let row = min(Int(side) - 1, max(0, Int((rect.midY - world.minY) / world.height * side)))
-            groups[row * Int(side) + column, default: []].append(shape)
-        }
-        return Array(groups.values)
-    }
 
     private static func points(_ url: URL) -> [(CLLocationCoordinate2D, [String: Any])] {
         guard let data = try? Data(contentsOf: url),

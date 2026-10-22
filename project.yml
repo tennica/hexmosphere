@@ -65,6 +65,7 @@ targets:
       properties:
         CFBundleDisplayName: Hexmosphere
         UILaunchScreen: {}
+        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons. It never changes your library, and nothing leaves this iPad.
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

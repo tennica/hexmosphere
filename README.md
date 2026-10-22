@@ -44,7 +44,9 @@ xcrun devicectl device install app --device <UDID> build/Build/Products/Debug-ip
 
 With a free Apple ID ("Personal Team"), an installed iPad build stops launching after about 7 days until it's rebuilt and reinstalled.
 
-Neither app needs Photos permission: the Photos picker runs outside the app and hands over only the chosen items. Locations come from each file's own metadata: EXIF GPS for images, ISO 6709 for videos. Items without a location are counted in the summary.
+On the iPad, **Whole Library…** reads every photo and video instead, from the Photos library's own metadata (location, date, accuracy). No image is opened or downloaded, so even a large library takes seconds. That asks for Photos access, Full or Limited to a chosen set; the app never changes the library. It's off unless you tap it.
+
+Apart from that button, neither app needs Photos permission: the Photos picker runs outside the app and hands over only the chosen items. Locations come from each file's own metadata: EXIF GPS for images, ISO 6709 for videos. Items without a location are counted in the summary.
 
 If the originals live only in iCloud ("Optimize Storage"), Photos has to download each one first, and that can be slow. In that case, exporting with location and using **Open Files…** works too.
 
