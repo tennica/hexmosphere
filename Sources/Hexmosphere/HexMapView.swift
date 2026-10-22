@@ -22,7 +22,7 @@ struct HexMapView: PlatformViewRepresentable {
     /// Apple's street map when true; otherwise the bundled offline base map,
     /// and MapKit fetches no tiles.
     let appleMap: Bool
-    /// Bumped to ask the map to fit all cells again.
+    /// Bumped to ask the map to zoom to the area with the most photos.
     let fitToken: Int
     let onSelect: (CellSummary?) -> Void
 
@@ -89,8 +89,9 @@ struct HexMapView: PlatformViewRepresentable {
 
         if coordinator.fittedToken != fitToken {
             coordinator.fittedToken = fitToken
-            let rect = coordinator.hexOverlays.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
-            if !rect.isNull {
+            if let region = binned.busiestRegion {
+                let corners = outline(of: region, backend: binned.backend)
+                let rect = MKPolygon(coordinates: corners, count: corners.count).boundingMapRect
                 #if os(macOS)
                 let padding = NSEdgeInsets(top: 40, left: 40, bottom: 40, right: 40)
                 #else
