@@ -44,7 +44,7 @@ xcrun devicectl device install app --device <UDID> build/Build/Products/Debug-ip
 
 With a free Apple ID ("Personal Team"), an installed iPad build stops launching after about 7 days until it's rebuilt and reinstalled.
 
-Per-photo picking (the Photos picker, or files from a folder) is in `MediaLocations.swift` but not in the interface at the moment. When it was, it needed no Photos permission: the Photos picker runs outside the app and hands over only the chosen items. Locations come from each file's own metadata: EXIF GPS for images, ISO 6709 for videos. Items without a location are counted in the summary.
+Earlier versions could also read individual photos chosen with the Photos picker, or files from a folder, without Photos library access. That code was removed once both apps moved to the whole library; it's in the git history.
 
 If the originals live only in iCloud ("Optimize Storage"), Photos has to download each one first, and that can be slow. In that case, exporting with location and using **Open Files…** works too.
 
@@ -122,7 +122,6 @@ Building needs the Rust part either way: `Packages/h3o-ffi/build-xcframework.sh`
 
 - `Sources/Hexmosphere`: the app, shared by Mac and iPad (SwiftUI):
   - `H3Grid.swift`: H3 wrappers for both backends, cell sizes, binning
-  - `MediaLocations.swift`: reads location and date from chosen photos and files
   - `HexMapView.swift`: MapKit, with one multipolygon per shade level
   - `ContentView.swift`: controls and summary
 - `Packages/h3o-ffi`: a small Rust crate exposing three h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)

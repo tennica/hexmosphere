@@ -8,6 +8,12 @@ import CoreLocation
 import Foundation
 import Photos
 
+/// How many items were read, and how many had no usable location.
+struct ImportTally {
+    var chosen = 0
+    var withoutLocation = 0
+}
+
 enum LibraryAccessError: LocalizedError {
     case denied
 

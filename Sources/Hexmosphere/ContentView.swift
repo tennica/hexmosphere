@@ -130,7 +130,6 @@ struct ContentView: View {
             "\(binned.cells.count) hexagons at \(size.label(backend))",
         ]
         if tally.withoutLocation > 0 { parts.append("\(tally.withoutLocation) without a location") }
-        if tally.unreadable > 0 { parts.append("\(tally.unreadable) couldn't be read") }
         if binned.tooCoarse > 0 {
             parts.append("\(binned.tooCoarse) left out: position not known well enough for this size")
         }
