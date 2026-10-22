@@ -109,17 +109,23 @@ struct HexMapView: PlatformViewRepresentable {
         configuration.pointOfInterestFilter = .excludingAll
         configuration.showsTraffic = false
         map.preferredConfiguration = configuration
-        let basemap = Coordinator.basemap
-        var below: [MKOverlay] = [BlankTiles()]
-        below += basemap.overlays
-        // Cells sit above the outlines; place names go on top of everything.
-        for overlay in below.reversed() {
-            map.insertOverlay(overlay, at: 0, level: .aboveRoads)
-        }
-        coordinator.baseOverlays = below
-        if let places = basemap.places {
-            map.addOverlay(places, level: .aboveLabels)
-            coordinator.baseOverlays.append(places)
+        // The blank background goes in at once, so no Apple tiles load while
+        // the bundled data (up to tens of MB) is read in the background.
+        let blank = BlankTiles()
+        map.insertOverlay(blank, at: 0, level: .aboveRoads)
+        coordinator.baseOverlays = [blank]
+        Basemap.whenLoaded { [weak map, weak coordinator] basemap in
+            guard let map, let coordinator, coordinator.appleMap == false,
+                  coordinator.baseOverlays.count == 1 else { return }
+            // Cells sit above the outlines; place names go on top of everything.
+            for (offset, overlay) in basemap.overlays.enumerated() {
+                map.insertOverlay(overlay, at: offset + 1, level: .aboveRoads)
+            }
+            coordinator.baseOverlays += basemap.overlays
+            if let places = basemap.places {
+                map.addOverlay(places, level: .aboveLabels)
+                coordinator.baseOverlays.append(places)
+            }
         }
     }
 
@@ -135,9 +141,6 @@ struct HexMapView: PlatformViewRepresentable {
         var hexOverlays: [MKOverlay] = []
         var baseOverlays: [MKOverlay] = []
         var onSelect: (CellSummary?) -> Void
-
-        /// Loaded once and shared; a few MB of outlines and place names.
-        static let basemap = Basemap.load()
 
         init(onSelect: @escaping (CellSummary?) -> Void) { self.onSelect = onSelect }
 

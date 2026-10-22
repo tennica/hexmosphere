@@ -57,14 +57,44 @@ By default the map shows **no Apple map content and fetches no tiles**. Instead 
 
 The **Apple map** toggle switches to Apple's full street map, with realistic elevation. That fetches tiles from Apple for whatever area is on screen, so Apple can infer which places you're looking at.
 
+### More detail: caching larger Natural Earth sets
+
+The repository carries only the small set above. To build with more, cache a whole Natural Earth scale first:
+
+```bash
+scripts/fetch-basemap.sh naturalearth 50m    # all 45 layers, about 57 MB
+scripts/fetch-basemap.sh naturalearth 10m    # all 129 layers, about 1 GB
+scripts/fetch-basemap.sh naturalearth 110m   # all 32 layers, about 19 MB
+```
+
+The layers download once into `~/Library/Caches/hexmosphere/naturalearth/<version>/<scale>`. Set `HEXMOSPHERE_CACHE` to put the cache somewhere else. They're then cloned into `Basemap/naturalearth-extra/`, which is gitignored; on APFS that clone costs no extra space. The next build bundles whatever is there.
+
+For each layer, the app uses the finest scale it finds, 10m before 50m before 110m. It draws the layers it has a style for, from bottom to top:
+
+- ocean
+- glaciers and ice shelves
+- dry lake beds
+- urban areas
+- lakes
+- rivers
+- tropics and polar circles
+- coastlines
+- state lines
+- maritime and disputed borders
+- land borders
+
+Other cached layers, such as country polygons, graticules and region labels, are left out. With the 50m set the app is about 60 MB. The base map loads in the background, so the window doesn't wait for it.
+
+### More places
+
 To add OpenStreetMap places for another region (one Overpass API query, with retries if the public server is busy):
 
 ```bash
-scripts/fetch-basemap.sh <name> <south> <west> <north> <east>
-# e.g. scripts/fetch-basemap.sh newmexico 31.3 -109.1 37.0 -103.0
+scripts/fetch-basemap.sh places <name> <south> <west> <north> <east>
+# e.g. scripts/fetch-basemap.sh places newmexico 31.3 -109.1 37.0 -103.0
 ```
 
-Running it with no arguments re-downloads the Natural Earth layers and the Colorado places.
+Running the script with no arguments re-downloads the committed set: the Natural Earth layers above and the Colorado places.
 
 ## H3 backend (build flag)
 
@@ -93,7 +123,10 @@ Their average edge lengths differ, though. H3 C 4.1.0's are about 13% smaller (1
 - `Packages/h3o-ffi`: a small Rust crate exposing three h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
 - `Packages/CH3`: Uber's H3 v4.1.0 C library, vendored unchanged as a SwiftPM C target (Apache-2.0; `LICENSE-h3`). `include/h3api.h` is generated from `h3api.h.in` with the version filled in. Source: the v4.1.0 release tarball, sha256 `ec99f1f5974846bde64f4513cf8d2ea1b8d172d2218ab41803bf6a63532272bc`.
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
-- `Basemap/`: the offline base map data (`naturalearth/`, public domain; `osm/`, ODbL with its own `LICENSE.md`), fetched by `scripts/fetch-basemap.sh`, and drawn by `Sources/Hexmosphere/Basemap.swift`
+- `Basemap/`: the offline base map data, fetched by `scripts/fetch-basemap.sh` and drawn by `Sources/Hexmosphere/Basemap.swift`:
+  - `naturalearth/`: public domain
+  - `naturalearth-extra/`: local caches only, gitignored
+  - `osm/`: ODbL, with its own `LICENSE.md`
 - `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiPad` for iPadOS)
 
 ## Ideas for later

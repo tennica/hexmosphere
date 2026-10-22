@@ -46,13 +46,57 @@ final class BlankTiles: MKTileOverlay {
     }
 }
 
-enum LineStyle { case coast, border, state }
+/// How one Natural Earth layer is drawn.
+struct LayerStyle {
+    enum Kind { case line, fill }
+    let kind: Kind
+    let stroke: (CGFloat, CGFloat, CGFloat)?
+    let fill: (CGFloat, CGFloat, CGFloat)?
+    let width: CGFloat
+    let dash: [NSNumber]?
 
-final class BaseLines: MKMultiPolyline {
-    var style = LineStyle.coast
+    static func line(_ c: (CGFloat, CGFloat, CGFloat), _ width: CGFloat, dash: [NSNumber]? = nil) -> LayerStyle {
+        LayerStyle(kind: .line, stroke: c, fill: nil, width: width, dash: dash)
+    }
+    static func area(_ fill: (CGFloat, CGFloat, CGFloat), edge: (CGFloat, CGFloat, CGFloat)? = nil) -> LayerStyle {
+        LayerStyle(kind: .fill, stroke: edge, fill: fill, width: 0.6, dash: nil)
+    }
 }
 
-final class BaseWater: MKMultiPolygon {}
+private let water = (CGFloat(0.84), CGFloat(0.89), CGFloat(0.94))
+private let waterEdge = (CGFloat(0.45), CGFloat(0.52), CGFloat(0.60))
+private let ice = (CGFloat(0.95), CGFloat(0.97), CGFloat(0.99))
+
+/// The Natural Earth layers the app draws, bottom to top, by name without the
+/// scale prefix. Other layers in the folders (countries, graticules, labels…)
+/// are cached but not drawn.
+let layerStyles: [(String, LayerStyle)] = [
+    ("ocean", .area(water)),
+    ("glaciated_areas", .area(ice)),
+    ("antarctic_ice_shelves_polys", .area(ice)),
+    ("playas", .area((0.93, 0.89, 0.80))),
+    ("urban_areas", .area((0.89, 0.87, 0.84))),
+    ("lakes", .area(water, edge: waterEdge)),
+    ("lakes_north_america", .area(water, edge: waterEdge)),
+    ("lakes_europe", .area(water, edge: waterEdge)),
+    ("rivers_lake_centerlines", .line((0.55, 0.68, 0.82), 0.8)),
+    ("rivers_north_america", .line((0.55, 0.68, 0.82), 0.6)),
+    ("rivers_europe", .line((0.55, 0.68, 0.82), 0.6)),
+    ("geographic_lines", .line((0.70, 0.72, 0.76), 0.5, dash: [2, 4])),
+    ("coastline", .line(waterEdge, 1.0)),
+    ("admin_1_states_provinces_lines", .line((0.62, 0.62, 0.64), 0.7, dash: [4, 3])),
+    ("admin_0_boundary_lines_maritime_indicator", .line((0.55, 0.62, 0.72), 0.6, dash: [3, 3])),
+    ("admin_0_boundary_lines_disputed_areas", .line((0.50, 0.50, 0.52), 0.9, dash: [5, 3])),
+    ("admin_0_boundary_lines_land", .line((0.50, 0.50, 0.52), 1.0)),
+]
+
+final class StyledLines: MKMultiPolyline {
+    var style = LayerStyle.line((0, 0, 0), 1)
+}
+
+final class StyledAreas: MKMultiPolygon {
+    var style = LayerStyle.area((0, 0, 0))
+}
 
 struct Place {
     let point: MKMapPoint
@@ -120,16 +164,52 @@ struct Basemap {
     var overlays: [MKOverlay] = []
     var places: Places?
 
+    private static let queue = DispatchQueue(label: "hexmosphere.basemap", qos: .userInitiated)
+    private static var loaded: Basemap?
+
+    /// Loads the bundled base map once, off the main thread, and hands it back on the main thread.
+    static func whenLoaded(_ done: @escaping (Basemap) -> Void) {
+        if let loaded { return done(loaded) }
+        queue.async {
+            let basemap = loaded ?? load()
+            DispatchQueue.main.async {
+                loaded = basemap
+                done(basemap)
+            }
+        }
+    }
+
+    /// Every Natural Earth file in Basemap/naturalearth and Basemap/naturalearth-extra,
+    /// keeping the finest scale (10m, then 50m, then 110m) for each layer name.
+    private static func naturalEarthLayers(_ root: URL) -> [String: URL] {
+        let rank = ["10m": 0, "50m": 1, "110m": 2]
+        var best: [String: (Int, URL)] = [:]
+        for folder in ["naturalearth", "naturalearth-extra"] {
+            let dir = root.appendingPathComponent(folder)
+            for file in (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] {
+                let name = file.deletingPathExtension().lastPathComponent
+                guard file.pathExtension == "geojson", name.hasPrefix("ne_") else { continue }
+                let parts = name.dropFirst(3).split(separator: "_", maxSplits: 1).map(String.init)
+                guard parts.count == 2, let r = rank[parts[0]] else { continue }
+                if best[parts[1]].map({ r < $0.0 }) ?? true { best[parts[1]] = (r, file) }
+            }
+        }
+        return best.mapValues(\.1)
+    }
+
     static func load() -> Basemap {
         guard let root = Bundle.main.url(forResource: "Basemap", withExtension: nil) else { return Basemap() }
         var basemap = Basemap()
-        let ne = root.appendingPathComponent("naturalearth")
-        basemap.overlays += lines(ne.appendingPathComponent("ne_50m_coastline.geojson"), .coast)
-        basemap.overlays += lines(ne.appendingPathComponent("ne_50m_admin_0_boundary_lines_land.geojson"), .border)
-        basemap.overlays += lines(ne.appendingPathComponent("ne_50m_admin_1_states_provinces_lines.geojson"), .state)
-        basemap.overlays += water(ne.appendingPathComponent("ne_50m_lakes.geojson"))
+        let layers = naturalEarthLayers(root)
+        for (name, style) in layerStyles {
+            guard let url = layers[name] else { continue }
+            basemap.overlays += overlays(url, style)
+        }
 
-        var places = worldCities(ne.appendingPathComponent("ne_10m_populated_places_simple.geojson"))
+        var places: [Place] = []
+        if let cities = layers["populated_places_simple"] ?? layers["populated_places"] {
+            places += worldCities(cities)
+        }
         let osm = root.appendingPathComponent("osm")
         for file in (try? FileManager.default.contentsOfDirectory(at: osm, includingPropertiesForKeys: nil)) ?? []
         where file.lastPathComponent.hasPrefix("places-") && file.pathExtension == "geojson" {
@@ -145,29 +225,29 @@ struct Basemap {
         return objects.compactMap { $0 as? MKGeoJSONFeature }
     }
 
-    private static func lines(_ url: URL, _ style: LineStyle) -> [MKOverlay] {
+    private static func overlays(_ url: URL, _ style: LayerStyle) -> [MKOverlay] {
         var polylines: [MKPolyline] = []
+        var polygons: [MKPolygon] = []
         for feature in features(url) {
             for shape in feature.geometry {
                 if let line = shape as? MKPolyline { polylines.append(line) }
                 if let multi = shape as? MKMultiPolyline { polylines += multi.polylines }
-            }
-        }
-        guard !polylines.isEmpty else { return [] }
-        let overlay = BaseLines(polylines)
-        overlay.style = style
-        return [overlay]
-    }
-
-    private static func water(_ url: URL) -> [MKOverlay] {
-        var polygons: [MKPolygon] = []
-        for feature in features(url) {
-            for shape in feature.geometry {
                 if let polygon = shape as? MKPolygon { polygons.append(polygon) }
                 if let multi = shape as? MKMultiPolygon { polygons += multi.polygons }
             }
         }
-        return polygons.isEmpty ? [] : [BaseWater(polygons)]
+        switch style.kind {
+        case .line:
+            guard !polylines.isEmpty else { return [] }
+            let overlay = StyledLines(polylines)
+            overlay.style = style
+            return [overlay]
+        case .fill:
+            guard !polygons.isEmpty else { return [] }
+            let overlay = StyledAreas(polygons)
+            overlay.style = style
+            return [overlay]
+        }
     }
 
     private static func points(_ url: URL) -> [(CLLocationCoordinate2D, [String: Any])] {
@@ -207,6 +287,10 @@ struct Basemap {
 
 // MARK: - Renderers for the base layers
 
+private func color(_ c: (CGFloat, CGFloat, CGFloat)?, _ alpha: CGFloat = 1) -> PlatformColor? {
+    c.map { PlatformColor(red: $0.0, green: $0.1, blue: $0.2, alpha: alpha) }
+}
+
 func basemapRenderer(for overlay: MKOverlay) -> MKOverlayRenderer? {
     if let tiles = overlay as? BlankTiles {
         return MKTileOverlayRenderer(tileOverlay: tiles)
@@ -214,27 +298,18 @@ func basemapRenderer(for overlay: MKOverlay) -> MKOverlayRenderer? {
     if let places = overlay as? Places {
         return PlacesRenderer(places)
     }
-    if let lines = overlay as? BaseLines {
+    if let lines = overlay as? StyledLines {
         let renderer = MKMultiPolylineRenderer(multiPolyline: lines)
-        switch lines.style {
-        case .coast:
-            renderer.strokeColor = PlatformColor(red: 0.45, green: 0.52, blue: 0.60, alpha: 1)
-            renderer.lineWidth = 1.0
-        case .border:
-            renderer.strokeColor = PlatformColor(red: 0.50, green: 0.50, blue: 0.52, alpha: 1)
-            renderer.lineWidth = 1.0
-        case .state:
-            renderer.strokeColor = PlatformColor(red: 0.62, green: 0.62, blue: 0.64, alpha: 1)
-            renderer.lineWidth = 0.7
-            renderer.lineDashPattern = [4, 3]
-        }
+        renderer.strokeColor = color(lines.style.stroke)
+        renderer.lineWidth = lines.style.width
+        renderer.lineDashPattern = lines.style.dash
         return renderer
     }
-    if let water = overlay as? BaseWater {
-        let renderer = MKMultiPolygonRenderer(multiPolygon: water)
-        renderer.fillColor = PlatformColor(red: 0.84, green: 0.89, blue: 0.94, alpha: 1)
-        renderer.strokeColor = PlatformColor(red: 0.45, green: 0.52, blue: 0.60, alpha: 0.8)
-        renderer.lineWidth = 0.6
+    if let areas = overlay as? StyledAreas {
+        let renderer = MKMultiPolygonRenderer(multiPolygon: areas)
+        renderer.fillColor = color(areas.style.fill)
+        renderer.strokeColor = color(areas.style.stroke, 0.8)
+        renderer.lineWidth = areas.style.width
         return renderer
     }
     return nil

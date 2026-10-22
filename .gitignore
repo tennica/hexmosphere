@@ -18,3 +18,4 @@ ios/Sources/Info.plist
 vendor/
 
 .DS_Store
+Basemap/naturalearth-extra/
