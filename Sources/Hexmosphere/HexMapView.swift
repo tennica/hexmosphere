@@ -20,6 +20,9 @@ struct HexMapView: PlatformViewRepresentable {
     let binned: Binned
     let shading: Shading
     let size: CellSize
+    /// Apple's street map when true; otherwise the bundled offline base map,
+    /// and MapKit fetches no tiles.
+    let appleMap: Bool
     /// Bumped to ask the map to fit all cells again.
     let fitToken: Int
     let onSelect: (CellSummary?) -> Void
@@ -39,7 +42,6 @@ struct HexMapView: PlatformViewRepresentable {
     private func makeMap(_ context: Context) -> MKMapView {
         let map = MKMapView()
         map.delegate = context.coordinator
-        map.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .realistic)
         map.showsCompass = true
         #if os(macOS)
         map.showsZoomControls = true
@@ -55,7 +57,9 @@ struct HexMapView: PlatformViewRepresentable {
         coordinator.binned = binned
         coordinator.size = size
         coordinator.onSelect = onSelect
-        map.removeOverlays(map.overlays)
+        setBase(map, coordinator)
+        map.removeOverlays(coordinator.hexOverlays)
+        coordinator.hexOverlays = []
 
         let values = binned.cells.values.map { binned.value($0, shading) }
         guard let top = values.max(), top > 0 else { return }
@@ -73,11 +77,12 @@ struct HexMapView: PlatformViewRepresentable {
             let overlay = ShadedCells(polygons)
             overlay.level = level
             map.addOverlay(overlay, level: .aboveRoads)
+            coordinator.hexOverlays.append(overlay)
         }
 
         if coordinator.fittedToken != fitToken {
             coordinator.fittedToken = fitToken
-            let rect = map.overlays.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
+            let rect = coordinator.hexOverlays.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
             if !rect.isNull {
                 #if os(macOS)
                 let padding = NSEdgeInsets(top: 40, left: 40, bottom: 40, right: 40)
@@ -89,6 +94,35 @@ struct HexMapView: PlatformViewRepresentable {
         }
     }
 
+    /// Switches between Apple's map and the bundled base map when the toggle changes.
+    private func setBase(_ map: MKMapView, _ coordinator: Coordinator) {
+        guard coordinator.appleMap != appleMap else { return }
+        coordinator.appleMap = appleMap
+        map.removeOverlays(coordinator.baseOverlays)
+        coordinator.baseOverlays = []
+        if appleMap {
+            map.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .realistic)
+            map.pointOfInterestFilter = .includingAll
+            return
+        }
+        let configuration = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
+        configuration.pointOfInterestFilter = .excludingAll
+        configuration.showsTraffic = false
+        map.preferredConfiguration = configuration
+        let basemap = Coordinator.basemap
+        var below: [MKOverlay] = [BlankTiles()]
+        below += basemap.overlays
+        // Cells sit above the outlines; place names go on top of everything.
+        for overlay in below.reversed() {
+            map.insertOverlay(overlay, at: 0, level: .aboveRoads)
+        }
+        coordinator.baseOverlays = below
+        if let places = basemap.places {
+            map.addOverlay(places, level: .aboveLabels)
+            coordinator.baseOverlays.append(places)
+        }
+    }
+
     final class ShadedCells: MKMultiPolygon {
         var level = 0
     }
@@ -97,11 +131,18 @@ struct HexMapView: PlatformViewRepresentable {
         var binned = Binned()
         var size = CellSize.r9
         var fittedToken = -1
+        var appleMap: Bool?
+        var hexOverlays: [MKOverlay] = []
+        var baseOverlays: [MKOverlay] = []
         var onSelect: (CellSummary?) -> Void
+
+        /// Loaded once and shared; a few MB of outlines and place names.
+        static let basemap = Basemap.load()
 
         init(onSelect: @escaping (CellSummary?) -> Void) { self.onSelect = onSelect }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let base = basemapRenderer(for: overlay) { return base }
             guard let cells = overlay as? ShadedCells else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKMultiPolygonRenderer(multiPolygon: cells)
             let alpha = 0.15 + 0.7 * Double(cells.level + 1) / Double(HexMapView.levels)

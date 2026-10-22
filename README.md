@@ -48,6 +48,24 @@ Neither app needs Photos permission: the Photos picker runs outside the app and 
 
 If the originals live only in iCloud ("Optimize Storage"), Photos has to download each one first, and that can be slow. In that case, exporting with location and using **Open Files…** works too.
 
+## Base map
+
+By default the map shows **no Apple map content and fetches no tiles**. Instead it draws a bundled offline base map (about 5 MB) on a plain background:
+
+- **Natural Earth** (public domain): coastlines, country borders, state and province lines, lakes, and about 7,300 world cities
+- **OpenStreetMap place names** (ODbL, © OpenStreetMap contributors): cities, towns, suburbs and villages for chosen regions. Colorado is included. Smaller places are labelled as you zoom in.
+
+The **Apple map** toggle switches to Apple's full street map, with realistic elevation. That fetches tiles from Apple for whatever area is on screen, so Apple can infer which places you're looking at.
+
+To add OpenStreetMap places for another region (one Overpass API query, with retries if the public server is busy):
+
+```bash
+scripts/fetch-basemap.sh <name> <south> <west> <north> <east>
+# e.g. scripts/fetch-basemap.sh newmexico 31.3 -109.1 37.0 -103.0
+```
+
+Running it with no arguments re-downloads the Natural Earth layers and the Colorado places.
+
 ## H3 backend (build flag)
 
 Two H3 implementations, chosen at build time with `HEX_BACKEND`:
@@ -75,6 +93,7 @@ Their average edge lengths differ, though. H3 C 4.1.0's are about 13% smaller (1
 - `Packages/h3o-ffi`: a small Rust crate exposing three h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
 - `Packages/CH3`: Uber's H3 v4.1.0 C library, vendored unchanged as a SwiftPM C target (Apache-2.0; `LICENSE-h3`). `include/h3api.h` is generated from `h3api.h.in` with the version filled in. Source: the v4.1.0 release tarball, sha256 `ec99f1f5974846bde64f4513cf8d2ea1b8d172d2218ab41803bf6a63532272bc`.
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
+- `Basemap/`: the offline base map data (`naturalearth/`, public domain; `osm/`, ODbL with its own `LICENSE.md`), fetched by `scripts/fetch-basemap.sh`, and drawn by `Sources/Hexmosphere/Basemap.swift`
 - `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiPad` for iPadOS)
 
 ## Ideas for later

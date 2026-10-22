@@ -10,7 +10,11 @@ targets:
   Hexmosphere:
     type: application
     platform: macOS
-    sources: [Sources/Hexmosphere]
+    sources:
+      - path: Sources/Hexmosphere
+      - path: Basemap
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: CH3
       - framework: Packages/h3o-ffi/CH3O.xcframework
@@ -46,6 +50,9 @@ targets:
     sources:
       - path: Sources/Hexmosphere
         excludes: ["Info.plist", "*.entitlements"]
+      - path: Basemap
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: CH3
       - framework: Packages/h3o-ffi/CH3O.xcframework

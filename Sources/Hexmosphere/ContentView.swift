@@ -12,6 +12,8 @@ struct ContentView: View {
     @State private var busy = false
     @State private var size = CellSize.r9
     @State private var shading = Shading.days
+    /// Off by default: the bundled base map, and no map tiles fetched from Apple.
+    @State private var appleMap = false
     @State private var fitToken = 0
     @State private var selected: CellSummary?
 
@@ -38,13 +40,15 @@ struct ContentView: View {
                     ForEach(Shading.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .frame(maxWidth: 220)
+                Toggle("Apple map", isOn: $appleMap)
+                    .help("Show Apple's street map. This fetches map tiles from Apple for the areas you view.")
                 Button("Fit all") { fitToken += 1 }
                 Spacer()
             }
             .padding(10)
 
             ZStack(alignment: .bottomLeading) {
-                HexMapView(binned: binned, shading: shading, size: size, fitToken: fitToken) { selected = $0 }
+                HexMapView(binned: binned, shading: shading, size: size, appleMap: appleMap, fitToken: fitToken) { selected = $0 }
                 if let selected {
                     CellCard(cell: selected).padding(12)
                 }
@@ -87,7 +91,8 @@ struct ContentView: View {
 
     private func summary(_ binned: Binned) -> String {
         guard tally.chosen > 0 else {
-            return "Choose photos or open a folder of exported photos. Only what you choose is read, and nothing leaves this Mac."
+            let start = "Choose photos or open a folder of exported photos. Only what you choose is read, and nothing leaves this device."
+            return appleMap ? start : start + " " + basemapCredit
         }
         var parts = [
             "\(tally.chosen) chosen",
@@ -100,6 +105,7 @@ struct ContentView: View {
             parts.append("\(binned.tooCoarse) left out: position not known well enough for this size")
         }
         parts.append(h3Backend)
+        if !appleMap { parts.append(basemapCredit) }
         return parts.joined(separator: " · ") + ". Click a hexagon for details."
     }
 }
