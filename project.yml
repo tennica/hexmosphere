@@ -37,11 +37,6 @@ targets:
         # One signed binary per build (no separate debug and preview dylibs), so
         # signing asks for the keychain key once instead of three times.
         ENABLE_DEBUG_DYLIB: NO
-        # Build flag: h3o is the default; HEX_BACKEND=h3c on the xcodebuild
-        # command line switches to Uber's H3 C library.
-        HEX_BACKEND: h3o
-        HEX_BACKEND_CONDITION_h3o: H3O
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(HEX_BACKEND_CONDITION_$(HEX_BACKEND))"
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: NO
@@ -79,11 +74,6 @@ targets:
         # One signed binary per build (no separate debug and preview dylibs), so
         # signing asks for the keychain key once instead of three times.
         ENABLE_DEBUG_DYLIB: NO
-        # Build flag: h3o is the default; HEX_BACKEND=h3c on the xcodebuild
-        # command line switches to Uber's H3 C library.
-        HEX_BACKEND: h3o
-        HEX_BACKEND_CONDITION_h3o: H3O
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(HEX_BACKEND_CONDITION_$(HEX_BACKEND))"
         DEVELOPMENT_TEAM: ""  # pass DEVELOPMENT_TEAM=<your team ID> to xcodebuild
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: NO

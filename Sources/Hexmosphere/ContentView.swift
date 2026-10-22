@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var importing = false
     @State private var busy = false
     @State private var size = CellSize.r9
+    @State private var backend = H3Backend.h3o
     /// Off by default: the bundled base map, and no map tiles fetched from Apple.
     @State private var appleMap = false
     @State private var fitToken = 0
@@ -24,23 +25,31 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
+                #if os(iOS)
+                // On the iPad, the whole library is the only source for now.
+                Button { Task { await useLibrary() } } label: { Label("Whole Library…", systemImage: "photo.stack") }
+                    .help("Read where every photo in your library was taken. Asks for Photos access.")
+                #else
                 PhotosPicker(selection: $picked, matching: .any(of: [.images, .videos]),
                              preferredItemEncoding: .current) {
                     Label("Choose Photos…", systemImage: "photo.on.rectangle")
                 }
                 Button { importing = true } label: { Label("Open Files…", systemImage: "folder") }
-                #if os(iOS)
-                Button { Task { await useLibrary() } } label: { Label("Whole Library…", systemImage: "photo.stack") }
-                    .help("Read where every photo in your library was taken. Asks for Photos access.")
                 #endif
                 Button("Clear") { samples = []; tally = ImportTally(); selected = nil; libraryError = nil }
                     .disabled(samples.isEmpty && tally.chosen == 0)
                 Divider().frame(height: 20)
                 Picker("Cell size", selection: $size) {
-                    ForEach(CellSize.allCases) { Text($0.across).tag($0) }
+                    ForEach(CellSize.allCases) { Text($0.across(backend)).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .fixedSize()
+                Picker("H3", selection: $backend) {
+                    ForEach(H3Backend.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .help("Which H3 library makes the cells. They agree on every cell; their edge lengths, and so the size labels and accuracy cut-off, differ by about 13%.")
                 Toggle("Apple map", isOn: $appleMap)
                     .help("Show Apple's street map. This fetches map tiles from Apple for the areas you view.")
                 Button("Fit all") { fitToken += 1 }
@@ -77,6 +86,7 @@ struct ContentView: View {
             Task { await add { await readSamples(files: urls) } }
         }
         .onChange(of: size) { selected = nil; rebin() }
+        .onChange(of: backend) { selected = nil; rebin() }
         .onChange(of: samples.count) { rebin() }
     }
 
@@ -86,10 +96,12 @@ struct ContentView: View {
     }
 
     private func rebin() {
-        let samples = samples, size = size
+        let samples = samples, size = size, backend = backend
         Task {
-            let result = await Task.detached(priority: .userInitiated) { bin(samples, size: size) }.value
-            if size == self.size { binned = result }
+            let result = await Task.detached(priority: .userInitiated) {
+                bin(samples, size: size, backend: backend)
+            }.value
+            if size == self.size && backend == self.backend { binned = result }
         }
     }
 
@@ -126,20 +138,24 @@ struct ContentView: View {
     private func summary(_ binned: Binned) -> String {
         if let libraryError { return libraryError }
         guard tally.chosen > 0 else {
+            #if os(iOS)
+            let start = "Tap Whole Library to read where your photos were taken. Nothing leaves this iPad."
+            #else
             let start = "Choose photos or open a folder of exported photos. Only what you choose is read, and nothing leaves this device."
+            #endif
             return appleMap ? start : start + " " + basemapCredit
         }
         var parts = [
             "\(tally.chosen) chosen",
             "\(samples.count) with a location",
-            "\(binned.cells.count) hexagons at \(size.label)",
+            "\(binned.cells.count) hexagons at \(size.label(backend))",
         ]
         if tally.withoutLocation > 0 { parts.append("\(tally.withoutLocation) without a location") }
         if tally.unreadable > 0 { parts.append("\(tally.unreadable) couldn't be read") }
         if binned.tooCoarse > 0 {
             parts.append("\(binned.tooCoarse) left out: position not known well enough for this size")
         }
-        parts.append(h3Backend)
+        parts.append(backend.name)
         if !appleMap { parts.append(basemapCredit) }
         return parts.joined(separator: " · ") + ". Click a hexagon for details."
     }

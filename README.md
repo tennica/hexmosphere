@@ -25,7 +25,7 @@ A photo whose reported horizontal accuracy is coarser than the cell's edge is le
 Needs Xcode (macOS 15 / iPadOS 17 or later as targets), [XcodeGen](https://github.com/yonaskolb/XcodeGen) and, for the default h3o backend, a [rustup](https://rustup.rs) toolchain with the iOS target.
 
 ```bash
-# 1. The h3o backend (skip if building with HEX_BACKEND=h3c)
+# 1. The h3o library (always needed; both backends are built in)
 rustup target add aarch64-apple-ios
 Packages/h3o-ffi/build-xcframework.sh
 
@@ -44,9 +44,9 @@ xcrun devicectl device install app --device <UDID> build/Build/Products/Debug-ip
 
 With a free Apple ID ("Personal Team"), an installed iPad build stops launching after about 7 days until it's rebuilt and reinstalled.
 
-On the iPad, **Whole Library…** reads every photo and video instead, from the Photos library's own metadata (location, date, accuracy). No image is opened or downloaded, so even a large library takes seconds. That asks for Photos access, Full or Limited to a chosen set; the app never changes the library. It's off unless you tap it.
+On the iPad, for now, **Whole Library…** is the only source: it reads every photo and video from the Photos library's own metadata (location, date, accuracy). No image is opened or downloaded, so even a large library takes seconds. That asks for Photos access, Full or Limited to a chosen set; the app never changes the library. It's off unless you tap it.
 
-Apart from that button, neither app needs Photos permission: the Photos picker runs outside the app and hands over only the chosen items. Locations come from each file's own metadata: EXIF GPS for images, ISO 6709 for videos. Items without a location are counted in the summary.
+On the Mac, photos come from **Choose Photos…** and **Open Files…**, and the app needs no Photos permission: the Photos picker runs outside the app and hands over only the chosen items. Locations come from each file's own metadata: EXIF GPS for images, ISO 6709 for videos. Items without a location are counted in the summary.
 
 If the originals live only in iCloud ("Optimize Storage"), Photos has to download each one first, and that can be slow. In that case, exporting with location and using **Open Files…** works too.
 
@@ -97,22 +97,20 @@ scripts/fetch-basemap.sh places <name> <south> <west> <north> <east>
 
 Running the script with no arguments re-downloads the committed set: the Natural Earth layers above and the Colorado places.
 
-## H3 backend (build flag)
+## H3 backend (switch in the app)
 
-Two H3 implementations, chosen at build time with `HEX_BACKEND`:
+Both H3 implementations are built in, and the **h3o / H3 C** switch in the toolbar picks one:
 
-| `HEX_BACKEND` | Library | Notes |
-| --- | --- | --- |
-| `h3o` (default) | [h3o](https://github.com/HydroniumLabs/h3o) 0.8.0, Rust, through `Packages/h3o-ffi` | |
-| `h3c` | [Uber's H3](https://github.com/uber/h3) C library 4.1.0, `Packages/CH3` | needs no Rust |
-
-```bash
-xcodebuild -project Hexmosphere.xcodeproj -scheme Hexmosphere -derivedDataPath build HEX_BACKEND=h3c build
-```
+| Choice | Library |
+| --- | --- |
+| `h3o` (default) | [h3o](https://github.com/HydroniumLabs/h3o) 0.8.0, Rust, through `Packages/h3o-ffi` |
+| `H3 C` | [Uber's H3](https://github.com/uber/h3) C library 4.1.0, `Packages/CH3` |
 
 The two give identical cells and outlines: a comparison on 100,000 random points at resolutions 7, 9 and 11 found no differing cells, and vertex differences below 10⁻¹² degrees.
 
-Their average edge lengths differ, though. H3 C 4.1.0's are about 13% smaller (174.4 m against 200.8 m at resolution 9). So an `h3c` build labels the sizes about 2.1 km / 300 m / 40 m, and applies a slightly stricter accuracy cut-off. The summary line names the backend.
+Their average edge lengths differ, though. H3 C 4.1.0's are about 13% smaller (174.4 m against 200.8 m at resolution 9). So switching relabels the sizes (about 2.4 km / 350 m / 50 m with h3o, about 2.1 km / 300 m / 40 m with H3 C) and moves the accuracy cut-off; the hexagons themselves stay put. The summary line names the library in use.
+
+Building needs the Rust part either way: `Packages/h3o-ffi/build-xcframework.sh`, with a rustup toolchain that has `aarch64-apple-ios`.
 
 ## Layout
 

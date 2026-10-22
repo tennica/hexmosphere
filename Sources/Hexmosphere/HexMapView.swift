@@ -66,7 +66,7 @@ struct HexMapView: PlatformViewRepresentable {
         // shouldn't wash out everything else.
         var buckets = Array(repeating: [MKPolygon](), count: Self.levels)
         for cell in binned.cells.values {
-            let corners = outline(of: cell.id)
+            let corners = outline(of: cell.id, backend: binned.backend)
             guard corners.count >= 3 else { continue }
             let share = log(Double(binned.value(cell)) + 1) / log(Double(top) + 1)
             let level = min(Self.levels - 1, Int(share * Double(Self.levels)))
@@ -165,7 +165,7 @@ struct HexMapView: PlatformViewRepresentable {
             guard let gesture = gesture as? UIGestureRecognizer, let map = gesture.view as? MKMapView else { return }
             #endif
             let coordinate = map.convert(gesture.location(in: map), toCoordinateFrom: map)
-            guard let cell = cellFor(coordinate, size: size) else { return onSelect(nil) }
+            guard let cell = cellFor(coordinate, size: size, backend: binned.backend) else { return onSelect(nil) }
             onSelect(binned.cells[cell])
         }
     }
