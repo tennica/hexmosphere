@@ -25,11 +25,13 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
         com.apple.security.files.user-selected.read-only: true
+        com.apple.security.personal-information.photos-library: true
     info:
       path: Sources/Hexmosphere/Info.plist
       properties:
         CFBundleDisplayName: Hexmosphere
         LSApplicationCategoryType: public.app-category.utilities
+        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons. It never changes your library, and nothing leaves this Mac.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere

@@ -2,7 +2,7 @@
 
 A Mac and iPad app that draws where your photos and videos were taken as [H3](https://h3geo.org) hexagons, shaded by how many photos fall in each.
 
-It reads only the photos you choose (with the Photos picker, or as files from a folder) and never asks for access to the whole library. Everything stays on the device.
+**Whole Library…** reads the location, date and accuracy of every photo and video from the Photos library's own metadata. No image is opened or downloaded, so even a large library with originals in iCloud takes seconds. It needs Photos access, either Full or Limited to a chosen set, and never changes the library. Everything stays on the device.
 
 A new take on the 2015–2018 [SCUPPERfoundation/hexmosphere](https://github.com/SCUPPERfoundation/hexmosphere), which used DGGRID and a MapKit demo client.
 
@@ -44,9 +44,7 @@ xcrun devicectl device install app --device <UDID> build/Build/Products/Debug-ip
 
 With a free Apple ID ("Personal Team"), an installed iPad build stops launching after about 7 days until it's rebuilt and reinstalled.
 
-On the iPad, for now, **Whole Library…** is the only source: it reads every photo and video from the Photos library's own metadata (location, date, accuracy). No image is opened or downloaded, so even a large library takes seconds. That asks for Photos access, Full or Limited to a chosen set; the app never changes the library. It's off unless you tap it.
-
-On the Mac, photos come from **Choose Photos…** and **Open Files…**, and the app needs no Photos permission: the Photos picker runs outside the app and hands over only the chosen items. Locations come from each file's own metadata: EXIF GPS for images, ISO 6709 for videos. Items without a location are counted in the summary.
+Per-photo picking (the Photos picker, or files from a folder) is in `MediaLocations.swift` but not in the interface at the moment. When it was, it needed no Photos permission: the Photos picker runs outside the app and hands over only the chosen items. Locations come from each file's own metadata: EXIF GPS for images, ISO 6709 for videos. Items without a location are counted in the summary.
 
 If the originals live only in iCloud ("Optimize Storage"), Photos has to download each one first, and that can be slow. In that case, exporting with location and using **Open Files…** works too.
 

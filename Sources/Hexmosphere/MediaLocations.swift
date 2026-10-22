@@ -2,6 +2,8 @@
 // Reads where and when a photo or video was taken from the file's own metadata:
 // EXIF GPS for images (ImageIO), the ISO 6709 location for videos (AVFoundation).
 // Works on files the owner picked, so the app never needs Photos library access.
+// Not wired into the interface at the moment: both apps read the whole library
+// (LibraryLocations.swift). Kept for bringing back per-photo picking.
 
 import AVFoundation
 import CoreLocation

@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Controls for choosing photos and cell size, the map, and a summary.
+// The toolbar (library, cell size, H3 backend, base map), the map, and a summary.
 
-import PhotosUI
 import SwiftUI
 
 struct ContentView: View {
     @State private var samples: [Sample] = []
     @State private var tally = ImportTally()
-    @State private var picked: [PhotosPickerItem] = []
-    @State private var importing = false
     @State private var busy = false
     @State private var size = CellSize.r9
     @State private var backend = H3Backend.h3o
@@ -25,17 +22,10 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                #if os(iOS)
-                // On the iPad, the whole library is the only source for now.
+                // The whole library is the only source for now, on Mac and iPad alike.
+                // (Choosing individual photos or files is in MediaLocations.swift, unused.)
                 Button { Task { await useLibrary() } } label: { Label("Whole Library…", systemImage: "photo.stack") }
                     .help("Read where every photo in your library was taken. Asks for Photos access.")
-                #else
-                PhotosPicker(selection: $picked, matching: .any(of: [.images, .videos]),
-                             preferredItemEncoding: .current) {
-                    Label("Choose Photos…", systemImage: "photo.on.rectangle")
-                }
-                Button { importing = true } label: { Label("Open Files…", systemImage: "folder") }
-                #endif
                 Button("Clear") { samples = []; tally = ImportTally(); selected = nil; libraryError = nil }
                     .disabled(samples.isEmpty && tally.chosen == 0)
                 Divider().frame(height: 20)
@@ -75,16 +65,6 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
         }
-        .onChange(of: picked) {
-            let items = picked
-            guard !items.isEmpty else { return }
-            Task { await add { await readSamples(picked: items) }; picked = [] }
-        }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.image, .movie, .folder],
-                      allowsMultipleSelection: true) { result in
-            guard case .success(let urls) = result else { return }
-            Task { await add { await readSamples(files: urls) } }
-        }
         .onChange(of: size) { selected = nil; rebin() }
         .onChange(of: backend) { selected = nil; rebin() }
         .onChange(of: samples.count) { rebin() }
@@ -105,8 +85,7 @@ struct ContentView: View {
         }
     }
 
-    #if os(iOS)
-    /// Replaces whatever was chosen with every photo in the library.
+    /// Replaces whatever was shown with every photo in the library.
     private func useLibrary() async {
         busy = true
         libraryError = nil
@@ -122,31 +101,15 @@ struct ContentView: View {
             libraryError = error.localizedDescription
         }
     }
-    #endif
-
-    private func add(_ read: () async -> ([Sample], ImportTally)) async {
-        busy = true
-        let (found, more) = await read()
-        samples += found
-        tally.chosen += more.chosen
-        tally.withoutLocation += more.withoutLocation
-        tally.unreadable += more.unreadable
-        busy = false
-        fitToken += 1
-    }
 
     private func summary(_ binned: Binned) -> String {
         if let libraryError { return libraryError }
         guard tally.chosen > 0 else {
-            #if os(iOS)
-            let start = "Tap Whole Library to read where your photos were taken. Nothing leaves this iPad."
-            #else
-            let start = "Choose photos or open a folder of exported photos. Only what you choose is read, and nothing leaves this device."
-            #endif
+            let start = "Use Whole Library to read where your photos were taken. Nothing leaves this device."
             return appleMap ? start : start + " " + basemapCredit
         }
         var parts = [
-            "\(tally.chosen) chosen",
+            "\(tally.chosen) in the library",
             "\(samples.count) with a location",
             "\(binned.cells.count) hexagons at \(size.label(backend))",
         ]
@@ -157,7 +120,11 @@ struct ContentView: View {
         }
         parts.append(backend.name)
         if !appleMap { parts.append(basemapCredit) }
+        #if os(macOS)
         return parts.joined(separator: " · ") + ". Click a hexagon for details."
+        #else
+        return parts.joined(separator: " · ") + ". Tap a hexagon for details."
+        #endif
     }
 }
 
