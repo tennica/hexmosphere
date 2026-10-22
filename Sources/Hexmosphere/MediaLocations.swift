@@ -35,20 +35,28 @@ struct PickedMovie: Transferable {
 private final class Once<T>: @unchecked Sendable {
     private let lock = NSLock()
     private var done = false
-    func resume(_ continuation: CheckedContinuation<T?, Never>, _ value: T?) {
+    /// Returns false if the continuation was already resumed, so the value came too late.
+    @discardableResult
+    func resume(_ continuation: CheckedContinuation<T?, Never>, _ value: T?) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        guard !done else { return }
+        guard !done else { return false }
         done = true
         continuation.resume(returning: value)
+        return true
     }
 }
 
 /// Runs `work`, giving up after `seconds` without waiting for it, so one stuck
-/// picker item can't hang the import.
-private func withTimeout<T>(_ seconds: Double, _ work: @escaping @Sendable () async -> T?) async -> T? {
+/// picker item can't hang the import. A result that arrives after giving up is
+/// passed to `late`, so it can be cleaned up instead of left behind.
+private func withTimeout<T>(_ seconds: Double, late: @escaping @Sendable (T) -> Void = { _ in },
+                            _ work: @escaping @Sendable () async -> T?) async -> T? {
     await withCheckedContinuation { continuation in
         let once = Once<T>()
-        Task { once.resume(continuation, await work()) }
+        Task {
+            let value = await work()
+            if !once.resume(continuation, value), let value { late(value) }
+        }
         Task {
             try? await Task.sleep(for: .seconds(seconds))
             once.resume(continuation, nil)
@@ -62,7 +70,10 @@ private func temporaryFile(for item: PhotosPickerItem) async -> URL? {
     let types = item.supportedContentTypes
     NSLog("Hexmosphere: picked item offers %@", types.map(\.identifier).joined(separator: ", "))
     if types.contains(where: { $0.conforms(to: .movie) }) {
-        return await withTimeout(30) { try? await item.loadTransferable(type: PickedMovie.self)?.url }
+        // A video copied after the time limit would otherwise stay in the temporary folder.
+        return await withTimeout(30, late: { try? FileManager.default.removeItem(at: $0) }) {
+            try? await item.loadTransferable(type: PickedMovie.self)?.url
+        }
     }
     guard let data = await withTimeout(30, { try? await item.loadTransferable(type: Data.self) }) else {
         return nil
