@@ -1,0 +1,75 @@
+name: Hexmosphere
+options:
+  bundleIdPrefix: net.tennica
+  deploymentTarget:
+    macOS: "15.0"
+packages:
+  CH3:
+    path: Packages/CH3
+targets:
+  Hexmosphere:
+    type: application
+    platform: macOS
+    sources: [Sources/Hexmosphere]
+    dependencies:
+      - package: CH3
+      - framework: Packages/h3o-ffi/CH3O.xcframework
+        embed: false
+    entitlements:
+      path: Sources/Hexmosphere/Hexmosphere.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-only: true
+    info:
+      path: Sources/Hexmosphere/Info.plist
+      properties:
+        CFBundleDisplayName: Hexmosphere
+        LSApplicationCategoryType: public.app-category.utilities
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere
+        SWIFT_VERSION: "5.0"
+        # Build flag: h3o is the default; HEX_BACKEND=h3c on the xcodebuild
+        # command line switches to Uber's H3 C library.
+        HEX_BACKEND: h3o
+        HEX_BACKEND_CONDITION_h3o: H3O
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(HEX_BACKEND_CONDITION_$(HEX_BACKEND))"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+        GENERATE_INFOPLIST_FILE: NO
+  HexmosphereiPad:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources/Hexmosphere
+        excludes: ["Info.plist", "*.entitlements"]
+    dependencies:
+      - package: CH3
+      - framework: Packages/h3o-ffi/CH3O.xcframework
+        embed: false
+    info:
+      path: Sources/HexmosphereiPad/Info.plist
+      properties:
+        CFBundleDisplayName: Hexmosphere
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere.ipad
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "5.0"
+        # Build flag: h3o is the default; HEX_BACKEND=h3c on the xcodebuild
+        # command line switches to Uber's H3 C library.
+        HEX_BACKEND: h3o
+        HEX_BACKEND_CONDITION_h3o: H3O
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) $(HEX_BACKEND_CONDITION_$(HEX_BACKEND))"
+        DEVELOPMENT_TEAM: ""  # pass DEVELOPMENT_TEAM=<your team ID> to xcodebuild
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO

@@ -1,0 +1,35 @@
+name: HexmosphereLegacy
+options:
+  bundleIdPrefix: net.tennica
+targets:
+  HexmosphereLegacy:
+    type: application
+    platform: iOS
+    deploymentTarget: "12.0"
+    sources:
+      - path: Sources
+      - path: ../Packages/CH3/Sources/CH3
+        excludes: ["include/**"]
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Hexmosphere
+        UILaunchStoryboardName: LaunchScreen
+        NSPhotoLibraryUsageDescription: Hexmosphere reads where your photos were taken to draw them as hexagons. Nothing leaves this iPad.
+        UIRequiredDeviceCapabilities: [arm64]
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere.legacy
+        TARGETED_DEVICE_FAMILY: "2"
+        IPHONEOS_DEPLOYMENT_TARGET: "12.0"
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/../Packages/CH3/Sources/CH3/include", "$(SRCROOT)/../Packages/CH3/Sources/CH3"]
+        CLANG_ENABLE_OBJC_ARC: YES
+        GCC_WARN_INHIBIT_ALL_WARNINGS: YES
+        DEVELOPMENT_TEAM: ""  # pass DEVELOPMENT_TEAM=<your team ID> to xcodebuild
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO

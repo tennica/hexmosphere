@@ -1,0 +1,10 @@
+Hexmosphere
+Copyright 2026 David Van Duzer
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes:
+- H3 (https://github.com/uber/h3), Copyright Uber Technologies, Inc.,
+  Apache License 2.0 (Packages/CH3/LICENSE-h3), vendored unchanged from v4.1.0.
+- h3o (https://github.com/HydroniumLabs/h3o), BSD-3-Clause, fetched by Cargo
+  when building Packages/h3o-ffi.

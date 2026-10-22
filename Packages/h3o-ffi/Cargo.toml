@@ -1,0 +1,21 @@
+[package]
+name = "h3o-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "C functions over h3o for Hexmosphere, as an alternative to Uber's H3 C library"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+# Same version and features as solstone's map prototype: without `std`, h3o
+# skips ahash's compile-time RNG and its CC0 dependency; cells and outlines
+# don't need it.
+h3o = { version = "0.8.0", default-features = false }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"

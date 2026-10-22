@@ -1,0 +1,89 @@
+# Hexmosphere
+
+A Mac and iPad app that draws where your photos and videos were taken as [H3](https://h3geo.org) hexagons, shaded by how many days (or how many photos) fall in each.
+
+It reads only the photos you choose (with the Photos picker, or as files from a folder) and never asks for access to the whole library. Everything stays on the device.
+
+A new take on the 2015–2018 [SCUPPERfoundation/hexmosphere](https://github.com/SCUPPERfoundation/hexmosphere), which used DGGRID and a MapKit demo client.
+
+## Cell sizes
+
+Odd H3 resolutions only, so each choice is about 7× finer across (49× in area) than the one before:
+
+| H3 resolution | Across (flat to flat) | Scale |
+| --- | --- | --- |
+| 7 | about 2.4 km | town |
+| 9 | about 350 m | neighbourhood; the default |
+| 11 | about 50 m | building |
+
+The sizes come out of a hexagon map prototype for [solstone](https://github.com/solpbc/solstone-journal/issues/397). In those tests, resolution 10 with a one-ring lookup matched a 50 m place rule, 11 was borderline, and 12 broke down.
+
+A photo whose reported horizontal accuracy is coarser than the cell's edge is left out at that size and counted in the summary, so it can't land in a cell more or less at random. At resolution 11 that cut-off is about 29 m. Shading uses a log scale, so a few very busy cells don't wash out the rest.
+
+## Build
+
+Needs Xcode (macOS 15 / iPadOS 17 or later as targets), [XcodeGen](https://github.com/yonaskolb/XcodeGen) and, for the default h3o backend, a [rustup](https://rustup.rs) toolchain with the iOS target.
+
+```bash
+# 1. The h3o backend (skip if building with HEX_BACKEND=h3c)
+rustup target add aarch64-apple-ios
+Packages/h3o-ffi/build-xcframework.sh
+
+# 2. The Xcode project
+xcodegen generate
+
+# 3. The Mac app (signed to run locally)
+xcodebuild -project Hexmosphere.xcodeproj -scheme Hexmosphere -derivedDataPath build build
+open build/Build/Products/Debug/Hexmosphere.app
+
+# 4. The iPad app (needs your Apple team ID, Developer Mode on the iPad, and its UDID)
+xcodebuild -project Hexmosphere.xcodeproj -scheme HexmosphereiPad -derivedDataPath build \
+  -destination 'platform=iOS,id=<UDID>' -allowProvisioningUpdates DEVELOPMENT_TEAM=<team ID> build
+xcrun devicectl device install app --device <UDID> build/Build/Products/Debug-iphoneos/HexmosphereiPad.app
+```
+
+With a free Apple ID ("Personal Team"), an installed iPad build stops launching after about 7 days until it's rebuilt and reinstalled.
+
+Neither app needs Photos permission: the Photos picker runs outside the app and hands over only the chosen items. Locations come from each file's own metadata: EXIF GPS for images, ISO 6709 for videos. Items without a location are counted in the summary.
+
+If the originals live only in iCloud ("Optimize Storage"), Photos has to download each one first, and that can be slow. In that case, exporting with location and using **Open Files…** works too.
+
+## H3 backend (build flag)
+
+Two H3 implementations, chosen at build time with `HEX_BACKEND`:
+
+| `HEX_BACKEND` | Library | Notes |
+| --- | --- | --- |
+| `h3o` (default) | [h3o](https://github.com/HydroniumLabs/h3o) 0.8.0, Rust, through `Packages/h3o-ffi` | |
+| `h3c` | [Uber's H3](https://github.com/uber/h3) C library 4.1.0, `Packages/CH3` | needs no Rust |
+
+```bash
+xcodebuild -project Hexmosphere.xcodeproj -scheme Hexmosphere -derivedDataPath build HEX_BACKEND=h3c build
+```
+
+The two give identical cells and outlines: a comparison on 100,000 random points at resolutions 7, 9 and 11 found no differing cells, and vertex differences below 10⁻¹² degrees.
+
+Their average edge lengths differ, though. H3 C 4.1.0's are about 13% smaller (174.4 m against 200.8 m at resolution 9). So an `h3c` build labels the sizes about 2.1 km / 300 m / 40 m, and applies a slightly stricter accuracy cut-off. The summary line names the backend.
+
+## Layout
+
+- `Sources/Hexmosphere`: the app, shared by Mac and iPad (SwiftUI):
+  - `H3Grid.swift`: H3 wrappers for both backends, cell sizes, binning
+  - `MediaLocations.swift`: reads location and date from chosen photos and files
+  - `HexMapView.swift`: MapKit, with one multipolygon per shade level
+  - `ContentView.swift`: controls and summary
+- `Packages/h3o-ffi`: a small Rust crate exposing three h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
+- `Packages/CH3`: Uber's H3 v4.1.0 C library, vendored unchanged as a SwiftPM C target (Apache-2.0; `LICENSE-h3`). `include/h3api.h` is generated from `h3api.h.in` with the version filled in. Source: the v4.1.0 release tarball, sha256 `ec99f1f5974846bde64f4513cf8d2ea1b8d172d2218ab41803bf6a63532272bc`.
+- `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
+- `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiPad` for iPadOS)
+
+## Ideas for later
+
+- Workout routes from HealthKit (iPad), and Core Location visit monitoring going forward
+- A time filter by year or month
+- A RealityKit globe view
+- Tapping a cell to show its photos
+
+## License
+
+Apache-2.0. See `LICENSE` and `NOTICE`.
