@@ -1,0 +1,2 @@
+# Uber's H3 C library, vendored unchanged: leave it out of GitHub's language count.
+Packages/CH3/** linguist-vendored
