@@ -233,6 +233,7 @@ Building needs the Rust part either way (see [Build](#build), step 3).
   - `h3/`: the land as compacted H3 cells
   - `naturalearth-extra/`, `roads/`, `streets/`: fetched locally, gitignored (streets are OpenStreetMap data, ODbL)
 - `scripts/fetch-basemap.sh`: fetches all of the base map data; `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells
+- `tools/make-icon.swift`: draws the app icon (a cell and its six neighbours in rainbow colours, inside a circle) into `Sources/Hexmosphere/Assets.xcassets`; the command is at the top of the file
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
 - `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiOS` for iPad and iPhone)
 

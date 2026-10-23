@@ -40,6 +40,8 @@ targets:
         # One signed binary per build (no separate debug and preview dylibs), so
         # signing asks for the keychain key once instead of three times.
         ENABLE_DEBUG_DYLIB: NO
+        # Drawn by tools/make-icon.swift.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: NO
@@ -85,6 +87,8 @@ targets:
         # One signed binary per build (no separate debug and preview dylibs), so
         # signing asks for the keychain key once instead of three times.
         ENABLE_DEBUG_DYLIB: NO
+        # Drawn by tools/make-icon.swift.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DEVELOPMENT_TEAM: ""  # pass DEVELOPMENT_TEAM=<your team ID> to xcodebuild
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: NO
