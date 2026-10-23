@@ -63,8 +63,12 @@ targets:
       properties:
         CFBundleDisplayName: Hexmosphere
         UILaunchScreen: {}
-        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this iPad unless you export it.
+        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this device unless you export it.
         PHPhotoLibraryPreventAutomaticLimitedAccessAlert: true
+        UISupportedInterfaceOrientations~iphone:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown
@@ -73,7 +77,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere.ipad
-        TARGETED_DEVICE_FAMILY: "2"
+        # iPad and iPhone; the bundle ID keeps its old ".ipad" name so the
+        # installed app carries on (and a free team doesn't spend a new App ID).
+        TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.0"
         # One signed binary per build (no separate debug and preview dylibs), so
         # signing asks for the keychain key once instead of three times.

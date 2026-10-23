@@ -26,28 +26,17 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                // The whole library is the only source, on Mac and iPad alike.
-                Button { Task { await useLibrary() } } label: { Label("Whole Library…", systemImage: "photo.stack") }
-                    .help("Read where every photo in your library was taken. Asks for Photos access.")
-                Button("Clear") { samples = []; tally = ImportTally(); selected = nil; libraryError = nil }
-                    .disabled(samples.isEmpty && tally.chosen == 0)
-                Divider().frame(height: 20)
-                Picker("Cell size", selection: $size) {
-                    ForEach(CellSize.allCases) { Text($0.across(backend)).tag($0) }
+            // The full toolbar where it fits (Mac, iPad). On an iPhone the same
+            // controls sit close together, with icon buttons and, if still too
+            // wide, the cell size as a drop-down.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    toolbarControls
+                    Spacer()
+                    exportButton
                 }
-                .pickerStyle(.segmented)
-                .fixedSize()
-                Picker("H3", selection: $backend) {
-                    ForEach(H3Backend.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-                .help("Which H3 library makes the cells: h3o, an independent Rust implementation, or Uber's H3 C, the reference. They agree on every cell and edge length.")
-                Spacer()
-                Button { exportTiled() } label: { Label("Export Tiled…", systemImage: "square.and.arrow.up") }
-                    .disabled(binned.cells.isEmpty)
-                    .help("Save the hexagons in view as a Tiled map (a folder with hexmosphere.tmj), with each hexagon as a place to name.")
+                compactToolbar { sizePicker.pickerStyle(.segmented).fixedSize() }
+                compactToolbar { sizePicker.pickerStyle(.menu).fixedSize() }
             }
             .padding(10)
 
@@ -66,6 +55,10 @@ struct ContentView: View {
             // A panel of its own under the map, with room to read the counts
             // and timings while building up places.
             VStack(alignment: .leading, spacing: 8) {
+                // The base map's credit on a line of its own (ODbL asks for it).
+                Text(basemapCredit)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(summary(binned))
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
@@ -99,6 +92,65 @@ struct ContentView: View {
         .onChange(of: size) { selected = nil; rebin() }
         .onChange(of: backend) { selected = nil; rebin() }
         .onChange(of: samples.count) { rebin() }
+    }
+
+    @ViewBuilder private var toolbarControls: some View {
+        libraryButton
+        clearButton
+        Divider().frame(height: 20)
+        sizePicker.pickerStyle(.segmented).fixedSize()
+        backendPicker.pickerStyle(.segmented).fixedSize()
+    }
+
+    private func clear() {
+        samples = []
+        tally = ImportTally()
+        selected = nil
+        libraryError = nil
+    }
+
+    private var libraryButton: some View {
+        // The whole library is the only source, on every device.
+        Button { Task { await useLibrary() } } label: { Label("Whole Library…", systemImage: "photo.stack") }
+            .help("Read where every photo in your library was taken. Asks for Photos access.")
+    }
+
+    private var clearButton: some View {
+        Button("Clear") { clear() }
+            .disabled(samples.isEmpty && tally.chosen == 0)
+    }
+
+    private var sizePicker: some View {
+        Picker("Cell size", selection: $size) {
+            ForEach(CellSize.allCases) { Text($0.across(backend)).tag($0) }
+        }
+    }
+
+    private var backendPicker: some View {
+        Picker("H3", selection: $backend) {
+            ForEach(H3Backend.allCases) { Text($0.rawValue).tag($0) }
+        }
+        .help("Which H3 library makes the cells: h3o, an independent Rust implementation, or Uber's H3 C, the reference. They agree on every cell and edge length.")
+    }
+
+    /// The toolbar for narrow screens: the same controls, packed together.
+    private func compactToolbar(@ViewBuilder size: () -> some View) -> some View {
+        HStack(spacing: 8) {
+            libraryButton.labelStyle(.iconOnly)
+            Button { clear() } label: { Label("Clear", systemImage: "xmark.circle") }
+                .labelStyle(.iconOnly)
+                .disabled(samples.isEmpty && tally.chosen == 0)
+            size()
+            backendPicker.pickerStyle(.segmented).fixedSize()
+            exportButton.labelStyle(.iconOnly)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var exportButton: some View {
+        Button { exportTiled() } label: { Label("Export Tiled…", systemImage: "square.and.arrow.up") }
+            .disabled(binned.cells.isEmpty)
+            .help("Save the hexagons in view as a Tiled map (a folder with hexmosphere.tmj), with each hexagon as a place to name.")
     }
 
     private var progressText: String {
@@ -158,7 +210,7 @@ struct ContentView: View {
         if let libraryError { return libraryError }
         guard tally.chosen > 0 else {
             let start = "Use Whole Library to read where your photos were taken. Nothing leaves this device unless you export it."
-            return start + " " + basemapCredit
+            return start
         }
         var parts = [
             "\(tally.chosen) in the library",
@@ -171,7 +223,6 @@ struct ContentView: View {
         }
         if let readTime { parts.append("library read in \(seconds(readTime))") }
         if let binTime { parts.append("binned in \(seconds(binTime)) with \(backend.name)") } else { parts.append(backend.name) }
-        parts.append(basemapCredit)
         #if os(macOS)
         return parts.joined(separator: " · ") + ". Click a hexagon for details."
         #else

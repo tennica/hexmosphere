@@ -1,10 +1,10 @@
 # Hexmosphere
 
-A Mac and iPad app that draws where your photos and videos were taken as [H3](https://h3geo.org) hexagons, shaded by how many photos fall in each.
+A Mac, iPad and iPhone app that draws where your photos and videos were taken as [H3](https://h3geo.org) hexagons, shaded by how many photos fall in each.
 
 **Whole Library…** reads the location, date and accuracy of every photo and video from the Photos library's own metadata. No image is opened or downloaded, so even a large library with originals in iCloud takes seconds. It needs Photos access, either Full or Limited to a chosen set, and never changes the library. Everything stays on the device unless you export it (see Exporting to Tiled).
 
-Tapping or clicking a hexagon shows its details and previews of up to 24 of its photos, newest first. The previews come from PhotoKit under the same Photos access, with no further permission. They're kept in memory only, never saved, and never downloaded from iCloud: a photo whose preview isn't on the device shows a cloud placeholder. On iPad, iOS's occasional "select more photos?" prompt under Limited access is turned off.
+Tapping or clicking a hexagon shows its details and previews of up to 24 of its photos, newest first. The previews come from PhotoKit under the same Photos access, with no further permission. They're kept in memory only, never saved, and never downloaded from iCloud: a photo whose preview isn't on the device shows a cloud placeholder. On iPad and iPhone, iOS's occasional "select more photos?" prompt under Limited access is turned off.
 
 A new take on the 2015–2018 [SCUPPERfoundation/hexmosphere](https://github.com/SCUPPERfoundation/hexmosphere), which used DGGRID and a MapKit demo client.
 
@@ -40,13 +40,13 @@ xcodegen generate
 xcodebuild -project Hexmosphere.xcodeproj -scheme Hexmosphere -derivedDataPath build build
 open build/Build/Products/Debug/Hexmosphere.app
 
-# 4. The iPad app (needs your Apple team ID, Developer Mode on the iPad, and its UDID)
+# 4. The iPad and iPhone app (one target; needs your Apple team ID, Developer Mode on the device, and its UDID)
 xcodebuild -project Hexmosphere.xcodeproj -scheme HexmosphereiPad -derivedDataPath build \
   -destination 'platform=iOS,id=<UDID>' -allowProvisioningUpdates DEVELOPMENT_TEAM=<team ID> build
 xcrun devicectl device install app --device <UDID> build/Build/Products/Debug-iphoneos/HexmosphereiPad.app
 ```
 
-With a free Apple ID ("Personal Team"), an installed iPad build stops launching after about 7 days until it's rebuilt and reinstalled.
+With a free Apple ID ("Personal Team"), an installed iPad or iPhone build stops launching after about 7 days until it's rebuilt and reinstalled.
 
 Earlier versions could also read individual photos chosen with the Photos picker, or files from a folder, without Photos library access. That code was removed once both apps moved to the whole library; it's in the git history.
 
@@ -156,7 +156,7 @@ Building needs the Rust part either way: `Packages/h3o-ffi/build-xcframework.sh`
 
 ## Layout
 
-- `Sources/Hexmosphere`: the app, shared by Mac and iPad (SwiftUI):
+- `Sources/Hexmosphere`: the app, shared by Mac, iPad and iPhone (SwiftUI; on an iPhone the toolbar packs into icons):
   - `H3Grid.swift`: H3 wrappers for both backends, cell sizes, binning
   - `HexMapView.swift`: MapKit, with one multipolygon per shade level
   - `ContentView.swift`: controls and summary
@@ -168,7 +168,7 @@ Building needs the Rust part either way: `Packages/h3o-ffi/build-xcframework.sh`
   - `naturalearth-extra/`: local caches only, gitignored
   - `osm/`: ODbL, with its own `LICENSE.md`
 - `tools/landcells.c`: the land-filling tool, built and run by `scripts/build-land-cells.sh`
-- `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiPad` for iPadOS)
+- `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiPad` for iPad and iPhone, keeping its original name and bundle ID)
 
 ## Ideas for later
 
