@@ -96,6 +96,21 @@ func outline(of cell: CellID, backend: H3Backend) -> [CLLocationCoordinate2D] {
     }
 }
 
+/// `cell`'s position on H3's local I/J grid around `origin` (same resolution),
+/// or nil when H3 can't place it (too far away, or across pentagon distortion).
+func localIJ(of cell: CellID, origin: CellID, backend: H3Backend) -> (i: Int, j: Int)? {
+    switch backend {
+    case .h3o:
+        var i: Int32 = 0, j: Int32 = 0
+        guard h3o_cell_to_local_ij(origin, cell, &i, &j) else { return nil }
+        return (Int(i), Int(j))
+    case .h3c:
+        var coord = CoordIJ()
+        guard cellToLocalIj(origin, cell, 0, &coord) == 0 else { return nil }
+        return (Int(coord.i), Int(coord.j))
+    }
+}
+
 func cellName(_ cell: CellID) -> String {
     String(cell, radix: 16)
 }
@@ -124,6 +139,8 @@ struct Binned {
     var id = UUID()
     /// The backend these cells were made with, used again to draw and look them up.
     var backend = H3Backend.h3o
+    /// The cell size they were made at.
+    var size = CellSize.r7
     var cells: [CellID: CellSummary] = [:]
     /// Samples whose reported accuracy is coarser than the cell, so they would
     /// land in a cell more or less at random (the same rule as solstone's map).
@@ -136,7 +153,7 @@ struct Binned {
 }
 
 func bin(_ samples: [Sample], size: CellSize, backend: H3Backend, calendar: Calendar = .current) -> Binned {
-    var result = Binned(backend: backend)
+    var result = Binned(backend: backend, size: size)
     let edge = size.edgeMetres(backend)
     for sample in samples {
         if let accuracy = sample.accuracy, accuracy > edge {

@@ -25,12 +25,14 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
         com.apple.security.personal-information.photos-library: true
+        # Saving a Tiled export where the user chooses.
+        com.apple.security.files.user-selected.read-write: true
     info:
       path: Sources/Hexmosphere/Info.plist
       properties:
         CFBundleDisplayName: Hexmosphere
         LSApplicationCategoryType: public.app-category.utilities
-        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this Mac.
+        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this Mac unless you export it.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere
@@ -61,7 +63,7 @@ targets:
       properties:
         CFBundleDisplayName: Hexmosphere
         UILaunchScreen: {}
-        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this iPad.
+        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this iPad unless you export it.
         PHPhotoLibraryPreventAutomaticLimitedAccessAlert: true
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait

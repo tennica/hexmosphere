@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! The three H3 operations Hexmosphere uses, exposed as C functions over h3o.
+//! The four H3 operations Hexmosphere uses, exposed as C functions over h3o.
 //! Degrees in, degrees out; a cell index of 0 means "no cell".
 
 // The crate itself uses std (for its allocator); h3o is still built without
@@ -39,6 +39,25 @@ pub unsafe extern "C" fn h3o_cell_outline(
         written += 1;
     }
     written
+}
+
+/// Writes `cell`'s local I and J coordinates relative to `origin` (same
+/// resolution, not too far away) and returns true, or returns false when H3
+/// can't place it, as across pentagon distortion. Matches H3 C's cellToLocalIj.
+///
+/// # Safety
+/// `i` and `j` must be valid pointers.
+#[no_mangle]
+pub unsafe extern "C" fn h3o_cell_to_local_ij(origin: u64, cell: u64, i: *mut i32, j: *mut i32) -> bool {
+    let (Ok(origin), Ok(cell)) = (CellIndex::try_from(origin), CellIndex::try_from(cell)) else {
+        return false;
+    };
+    let Ok(local) = cell.to_local_ij(origin) else {
+        return false;
+    };
+    *i = local.coord.i;
+    *j = local.coord.j;
+    true
 }
 
 /// Average hexagon edge length in metres at `resolution`, or 0 if invalid.

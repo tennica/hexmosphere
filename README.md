@@ -2,7 +2,7 @@
 
 A Mac and iPad app that draws where your photos and videos were taken as [H3](https://h3geo.org) hexagons, shaded by how many photos fall in each.
 
-**Whole Library…** reads the location, date and accuracy of every photo and video from the Photos library's own metadata. No image is opened or downloaded, so even a large library with originals in iCloud takes seconds. It needs Photos access, either Full or Limited to a chosen set, and never changes the library. Everything stays on the device.
+**Whole Library…** reads the location, date and accuracy of every photo and video from the Photos library's own metadata. No image is opened or downloaded, so even a large library with originals in iCloud takes seconds. It needs Photos access, either Full or Limited to a chosen set, and never changes the library. Everything stays on the device unless you export it (see Exporting to Tiled).
 
 Tapping or clicking a hexagon shows its details and previews of up to 24 of its photos, newest first. The previews come from PhotoKit under the same Photos access, with no further permission. They're kept in memory only, never saved, and never downloaded from iCloud: a photo whose preview isn't on the device shows a cloud placeholder. On iPad, iOS's occasional "select more photos?" prompt under Limited access is turned off.
 
@@ -127,6 +127,17 @@ scripts/fetch-basemap.sh streets colorado 36.99 -109.06 41.01 -102.04
 ```
 
 The script asks the Overpass API for one 1° square at a time, caching each answer in `~/Library/Caches/hexmosphere/osm`, and writes `Basemap/streets/streets-<name>.bin` (gitignored) in the roads format. Each street class appears from a zoom level that suits it. Map zoom levels aren't H3 resolutions: zoom 14, when residential streets appear, shows about 8 km across an iPad at Denver's latitude, where a 2.4 km (resolution 7) hexagon is about 300 points wide. Motorways appear from zoom 5, primary and secondary roads from 8–9, tertiary from 11. Inside a region with streets, Natural Earth's coarse roads give way to them from zoom 10.
+
+## Exporting to Tiled
+
+**Export Tiled…** saves the hexagons in view as a map for [Tiled](https://www.mapeditor.org), the open-source map editor whose files many game engines and WorkAdventure read. It writes a folder holding `hexmosphere.tmj` (Tiled's JSON format) and its tile image, `hexes.png`:
+
+- **photo count**: a hexagonal tile layer (pointy-top, rows staggered), shaded by photo count as on screen.
+- **places**: one point object per hexagon, of class `h3cell`, with its H3 index, centre latitude and longitude, photo and day counts, and first and last dates. The name is left blank for you to fill in: this is where a place database starts.
+
+H3's local I/J grid (`cellToLocalIj`) lays the cells out, so cells that are neighbours in H3 are neighbours in Tiled. That grid points a different way in each part of the world, so the export turns it to north up: a hex grid only turns cleanly in 60° steps, and Tiled's pointy-topped and flat-topped hexagons differ by 30°, so the app measures the cells' grid positions against the map and picks the step and hexagon kind that come closest. The result is within 15° of north (Denver comes out flat-topped, about 5° off). The map's properties record the H3 resolution, library, origin cell, centre and the turn left over. Only cells near enough to the centre for H3 to place are exported; the app says how many were left out. Both H3 libraries give identical coordinates (25,096 cells compared over seven places and five resolutions).
+
+The export holds where and when you took photos, at the chosen cell size, and leaves the device only when you save it. It doesn't include Photos library identifiers. On the Mac, saving it uses the sandbox's user-selected read-write file access.
 
 ## H3 backend (switch in the app)
 

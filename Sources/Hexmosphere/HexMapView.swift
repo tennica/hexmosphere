@@ -20,10 +20,24 @@ struct HexMapView: PlatformViewRepresentable {
     let binned: Binned
     let size: CellSize
     let onSelect: (CellSummary?) -> Void
+    /// Where the map is looking, kept up to date for exporting the visible area.
+    let visible: VisibleArea
 
     static let levels = 6
 
-    func makeCoordinator() -> Coordinator { Coordinator(onSelect: onSelect) }
+    /// The shade level (0 to levels − 1) for a cell's value, on a log scale like
+    /// the solstone prototype, so a few very busy cells don't wash out the rest.
+    static func level(_ value: Int, top: Int) -> Int {
+        let share = log(Double(value) + 1) / log(Double(top) + 1)
+        return min(levels - 1, Int(share * Double(levels)))
+    }
+
+    /// Fill opacity for a shade level, shared with the Tiled export's tile image.
+    static func alpha(_ level: Int) -> Double {
+        0.15 + 0.7 * Double(level + 1) / Double(levels)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(onSelect: onSelect, visible: visible) }
 
     #if os(macOS)
     func makeNSView(context: Context) -> MKMapView { makeMap(context) }
@@ -67,8 +81,7 @@ struct HexMapView: PlatformViewRepresentable {
         for cell in binned.cells.values {
             let corners = outline(of: cell.id, backend: binned.backend)
             guard corners.count >= 3 else { continue }
-            let share = log(Double(binned.value(cell)) + 1) / log(Double(top) + 1)
-            let level = min(Self.levels - 1, Int(share * Double(Self.levels)))
+            let level = Self.level(binned.value(cell), top: top)
             buckets[level].append(MKPolygon(coordinates: corners, count: corners.count))
         }
         // One overlay per shade level and region, so a tile only draws nearby cells.
@@ -136,6 +149,12 @@ struct HexMapView: PlatformViewRepresentable {
         }
     }
 
+    /// The map's visible area, shared by reference so updating it doesn't
+    /// redraw the SwiftUI window on every pan.
+    final class VisibleArea {
+        var rect = MKMapRect.null
+    }
+
     final class ShadedCells: MKMultiPolygon {
         var level = 0
     }
@@ -150,13 +169,22 @@ struct HexMapView: PlatformViewRepresentable {
         var places: MKOverlay?
         var onSelect: (CellSummary?) -> Void
 
-        init(onSelect: @escaping (CellSummary?) -> Void) { self.onSelect = onSelect }
+        let visible: VisibleArea
+
+        init(onSelect: @escaping (CellSummary?) -> Void, visible: VisibleArea) {
+            self.onSelect = onSelect
+            self.visible = visible
+        }
+
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            visible.rect = mapView.visibleMapRect
+        }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let base = basemapRenderer(for: overlay) { return base }
             guard let cells = overlay as? ShadedCells else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKMultiPolygonRenderer(multiPolygon: cells)
-            let alpha = 0.15 + 0.7 * Double(cells.level + 1) / Double(HexMapView.levels)
+            let alpha = HexMapView.alpha(cells.level)
             renderer.fillColor = PlatformColor.systemOrange.withAlphaComponent(alpha)
             renderer.strokeColor = PlatformColor.systemOrange.withAlphaComponent(0.9)
             renderer.lineWidth = 0.8

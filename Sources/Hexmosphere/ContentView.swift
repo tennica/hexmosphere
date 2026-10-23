@@ -18,6 +18,11 @@ struct ContentView: View {
     @State private var binTime: Duration?
     @State private var libraryProgress: (Int, Int)?
     @State private var libraryError: String?
+    private let visible = HexMapView.VisibleArea()
+    @State private var export: TiledExport?
+    @State private var exporting = false
+    /// What the last export did, shown under the summary.
+    @State private var exportNote: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,11 +45,14 @@ struct ContentView: View {
                 .fixedSize()
                 .help("Which H3 library makes the cells: h3o, an independent Rust implementation, or Uber's H3 C, the reference. They agree on every cell and edge length.")
                 Spacer()
+                Button { exportTiled() } label: { Label("Export Tiled…", systemImage: "square.and.arrow.up") }
+                    .disabled(binned.cells.isEmpty)
+                    .help("Save the hexagons in view as a Tiled map (a folder with hexmosphere.tmj), with each hexagon as a place to name.")
             }
             .padding(10)
 
             ZStack(alignment: .bottomLeading) {
-                HexMapView(binned: binned, size: size) { selected = $0 }
+                HexMapView(binned: binned, size: size, onSelect: { selected = $0 }, visible: visible)
                 if let selected {
                     CellCard(cell: selected).padding(12)
                 }
@@ -61,6 +69,11 @@ struct ContentView: View {
                 Text(summary(binned))
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
+                if let exportNote {
+                    Text(exportNote)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 RoadTimes()
             }
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
@@ -68,6 +81,20 @@ struct ContentView: View {
             .padding(.vertical, 14)
             .background(.bar)
             .overlay(alignment: .top) { Divider() }
+        }
+        .fileExporter(isPresented: $exporting, document: export?.document, contentType: .folder,
+                      defaultFilename: export?.suggestedName) { result in
+            switch result {
+            case .success(let url):
+                guard let export else { return }
+                var note = "Exported \(export.exported.formatted()) hexagons to \(url.lastPathComponent)"
+                if export.leftOut > 0 {
+                    note += "; \(export.leftOut.formatted()) left out, too far from the centre for H3's local grid"
+                }
+                exportNote = note + "."
+            case .failure(let error):
+                exportNote = "Export failed: \(error.localizedDescription)"
+            }
         }
         .onChange(of: size) { selected = nil; rebin() }
         .onChange(of: backend) { selected = nil; rebin() }
@@ -82,6 +109,15 @@ struct ContentView: View {
     private func seconds(_ duration: Duration) -> String {
         let value = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
         return value < 1 ? String(format: "%.0f ms", value * 1000) : String(format: "%.2f s", value)
+    }
+
+    private func exportTiled() {
+        do {
+            export = try TiledExport(binned: binned, size: binned.size, visible: visible.rect)
+            exporting = true
+        } catch {
+            exportNote = error.localizedDescription
+        }
     }
 
     private func rebin() {
@@ -121,7 +157,7 @@ struct ContentView: View {
     private func summary(_ binned: Binned) -> String {
         if let libraryError { return libraryError }
         guard tally.chosen > 0 else {
-            let start = "Use Whole Library to read where your photos were taken. Nothing leaves this device."
+            let start = "Use Whole Library to read where your photos were taken. Nothing leaves this device unless you export it."
             return start + " " + basemapCredit
         }
         var parts = [
