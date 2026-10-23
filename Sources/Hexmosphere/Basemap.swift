@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The offline base map: Natural Earth outlines and OpenStreetMap place names,
 // bundled with the app and drawn by MapKit as overlays on a blank background,
-// so the map never asks Apple (or anyone) for tiles unless the Apple map is on.
+// so the map never asks Apple (or anyone) for tiles.
 
 import CoreGraphics
 import CoreText

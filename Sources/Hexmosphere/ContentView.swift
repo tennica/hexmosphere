@@ -9,8 +9,6 @@ struct ContentView: View {
     @State private var busy = false
     @State private var size = CellSize.r7
     @State private var backend = H3Backend.h3o
-    /// Off by default: the bundled base map, and no map tiles fetched from Apple.
-    @State private var appleMap = false
     @State private var selected: CellSummary?
     /// Recomputed off the main thread when the photos or the cell size change,
     /// so a whole library doesn't stall every redraw.
@@ -41,14 +39,12 @@ struct ContentView: View {
                 .pickerStyle(.segmented)
                 .fixedSize()
                 .help("Which H3 library makes the cells: h3o, an independent Rust implementation, or Uber's H3 C, the reference. They agree on every cell and edge length.")
-                Toggle("Apple map", isOn: $appleMap)
-                    .help("Show Apple's street map. This fetches map tiles from Apple for the areas you view.")
                 Spacer()
             }
             .padding(10)
 
             ZStack(alignment: .bottomLeading) {
-                HexMapView(binned: binned, size: size, appleMap: appleMap) { selected = $0 }
+                HexMapView(binned: binned, size: size) { selected = $0 }
                 if let selected {
                     CellCard(cell: selected).padding(12)
                 }
@@ -65,9 +61,7 @@ struct ContentView: View {
                 Text(summary(binned))
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
-                if !appleMap {
-                    RoadTimes()
-                }
+                RoadTimes()
             }
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
             .padding(.horizontal, 16)
@@ -128,7 +122,7 @@ struct ContentView: View {
         if let libraryError { return libraryError }
         guard tally.chosen > 0 else {
             let start = "Use Whole Library to read where your photos were taken. Nothing leaves this device."
-            return appleMap ? start : start + " " + basemapCredit
+            return start + " " + basemapCredit
         }
         var parts = [
             "\(tally.chosen) in the library",
@@ -141,7 +135,7 @@ struct ContentView: View {
         }
         if let readTime { parts.append("library read in \(seconds(readTime))") }
         if let binTime { parts.append("binned in \(seconds(binTime)) with \(backend.name)") } else { parts.append(backend.name) }
-        if !appleMap { parts.append(basemapCredit) }
+        parts.append(basemapCredit)
         #if os(macOS)
         return parts.joined(separator: " · ") + ". Click a hexagon for details."
         #else

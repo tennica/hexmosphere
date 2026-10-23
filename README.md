@@ -54,12 +54,12 @@ If the originals live only in iCloud ("Optimize Storage"), Photos has to downloa
 
 ## Base map
 
-By default the map covers Apple's map entirely, roads and labels included, and draws a bundled offline base map (about 5 MB) on a plain background:
+The map is entirely offline. It covers Apple's map completely, roads and labels included, and draws a bundled base map (about 5 MB, plus roads and streets you fetch) on a plain background:
 
 - **Natural Earth** (public domain): coastlines, country borders, state and province lines, lakes, and about 7,300 world cities
 - **OpenStreetMap place names** (ODbL, © OpenStreetMap contributors): cities, towns, suburbs and villages for chosen regions. Colorado is included. Smaller places are labelled as you zoom in.
 
-The **Apple map** toggle switches to Apple's full street map, with realistic elevation. That fetches tiles from Apple for whatever area is on screen, so Apple can infer which places you're looking at. With the toggle off, a Mac check found no tile requests after launch, but MapKit may still contact Apple, for example at startup.
+There's no switch to Apple's map: for street detail, fetch a region's OpenStreetMap streets (below). Earlier versions had an Apple map toggle, but it fetched tiles from Apple for whatever area was on screen, so Apple could infer which places you were looking at. With the offline map, a Mac check found no tile requests after launch, but MapKit may still contact Apple, for example at startup.
 
 ### Land as H3 cells
 

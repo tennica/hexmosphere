@@ -19,9 +19,6 @@ typealias PlatformViewRepresentable = UIViewRepresentable
 struct HexMapView: PlatformViewRepresentable {
     let binned: Binned
     let size: CellSize
-    /// Apple's street map when true; otherwise the bundled offline base map,
-    /// and MapKit fetches no tiles.
-    let appleMap: Bool
     let onSelect: (CellSummary?) -> Void
 
     static let levels = 6
@@ -46,6 +43,7 @@ struct HexMapView: PlatformViewRepresentable {
         #else
         map.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.picked(_:))))
         #endif
+        addBase(map, context.coordinator)
         return map
     }
 
@@ -54,7 +52,6 @@ struct HexMapView: PlatformViewRepresentable {
         coordinator.binned = binned
         coordinator.size = size
         coordinator.onSelect = onSelect
-        setBase(map, coordinator)
         // SwiftUI calls this for any change in the window; rebuild the cells
         // only when they changed, or redrawing them can feed back into here.
         guard coordinator.drawnID != binned.id else { return }
@@ -100,18 +97,10 @@ struct HexMapView: PlatformViewRepresentable {
         }
     }
 
-    /// Switches between Apple's map and the bundled base map when the toggle changes.
-    private func setBase(_ map: MKMapView, _ coordinator: Coordinator) {
-        guard coordinator.appleMap != appleMap else { return }
-        coordinator.appleMap = appleMap
-        map.removeOverlays(coordinator.baseOverlays)
-        coordinator.baseOverlays = []
-        coordinator.places = nil
-        if appleMap {
-            map.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .realistic)
-            map.pointOfInterestFilter = .includingAll
-            return
-        }
+    /// Covers Apple's map with the bundled offline base map. Apple's map is
+    /// never shown: the offline map, with OpenStreetMap streets for fetched
+    /// regions, is the whole map.
+    private func addBase(_ map: MKMapView, _ coordinator: Coordinator) {
         let configuration = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         configuration.pointOfInterestFilter = .excludingAll
         configuration.showsTraffic = false
@@ -124,8 +113,7 @@ struct HexMapView: PlatformViewRepresentable {
         map.insertOverlay(blank, at: 0, level: .aboveLabels)
         coordinator.baseOverlays = [blank]
         Basemap.whenLoaded { [weak map, weak coordinator] basemap in
-            guard let map, let coordinator, coordinator.appleMap == false,
-                  coordinator.baseOverlays.count == 1 else { return }
+            guard let map, let coordinator else { return }
             // Cells sit above the outlines; place names go on top of everything.
             for (offset, overlay) in basemap.overlays.enumerated() {
                 map.insertOverlay(overlay, at: offset + 1, level: .aboveLabels)
@@ -155,7 +143,6 @@ struct HexMapView: PlatformViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate {
         var binned = Binned()
         var size = CellSize.r7
-        var appleMap: Bool?
         var drawnID: UUID?
         var hexOverlays: [MKOverlay] = []
         var baseOverlays: [MKOverlay] = []

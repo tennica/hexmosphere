@@ -26,8 +26,7 @@
 #       the zoom level Natural Earth suggests showing it from, and its line.
 #
 # Natural Earth is public domain; OpenStreetMap data is ODbL (Basemap/osm/LICENSE.md).
-# Downloads happen here, at build time; the app never asks anyone for map data
-# unless its Apple map is switched on.
+# Downloads happen here, at build time; the app never asks anyone for map data.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
