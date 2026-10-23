@@ -187,7 +187,10 @@ struct CellCard: View {
             Text("\(cell.days.count) days · \(cell.samples) photos")
             Text("\(cell.first.formatted(date: .abbreviated, time: .omitted)) – \(cell.last.formatted(date: .abbreviated, time: .omitted))")
                 .foregroundStyle(.secondary)
+            ThumbnailStrip(assetIDs: cell.photos.sorted { $0.date > $1.date }.prefix(ThumbnailStrip.limit).map(\.assetID))
+                .id(cell.id)
         }
+        .frame(maxWidth: 480, alignment: .leading)
         .padding(10)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
     }

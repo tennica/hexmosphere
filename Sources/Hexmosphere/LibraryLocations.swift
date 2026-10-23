@@ -2,7 +2,8 @@
 // Read where and when every photo and video in the Photos library was
 // taken, from the library's own metadata. No image is opened or downloaded, so a
 // library of tens of thousands of items takes seconds. Needs Photos access (Full,
-// or Limited to a chosen subset); the app never writes to the library.
+// or Limited to a chosen subset); the app never writes to the library. Thumbnails
+// for a tapped cell come later, from Thumbnails.swift.
 
 import CoreLocation
 import Foundation
@@ -53,7 +54,8 @@ func readLibrary(progress: @escaping @MainActor (Int, Int) -> Void) async throws
                     return
                 }
                 let accuracy = location.horizontalAccuracy > 0 ? location.horizontalAccuracy : nil
-                samples.append(Sample(coordinate: location.coordinate, date: date, accuracy: accuracy))
+                samples.append(Sample(coordinate: location.coordinate, date: date, accuracy: accuracy,
+                                      assetID: asset.localIdentifier))
             }
             start = end
             let done = end

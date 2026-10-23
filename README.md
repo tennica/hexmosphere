@@ -4,6 +4,8 @@ A Mac and iPad app that draws where your photos and videos were taken as [H3](ht
 
 **Whole Library…** reads the location, date and accuracy of every photo and video from the Photos library's own metadata. No image is opened or downloaded, so even a large library with originals in iCloud takes seconds. It needs Photos access, either Full or Limited to a chosen set, and never changes the library. Everything stays on the device.
 
+Tapping or clicking a hexagon shows its details and previews of up to 24 of its photos, newest first. The previews come from PhotoKit under the same Photos access, with no further permission. They're kept in memory only, never saved, and never downloaded from iCloud: a photo whose preview isn't on the device shows a cloud placeholder. On iPad, iOS's occasional "select more photos?" prompt under Limited access is turned off.
+
 A new take on the 2015–2018 [SCUPPERfoundation/hexmosphere](https://github.com/SCUPPERfoundation/hexmosphere), which used DGGRID and a MapKit demo client.
 
 ## Cell sizes

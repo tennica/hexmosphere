@@ -30,7 +30,7 @@ targets:
       properties:
         CFBundleDisplayName: Hexmosphere
         LSApplicationCategoryType: public.app-category.utilities
-        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons. It never changes your library, and nothing leaves this Mac.
+        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this Mac.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere
@@ -61,7 +61,8 @@ targets:
       properties:
         CFBundleDisplayName: Hexmosphere
         UILaunchScreen: {}
-        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons. It never changes your library, and nothing leaves this iPad.
+        NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this iPad.
+        PHPhotoLibraryPreventAutomaticLimitedAccessAlert: true
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

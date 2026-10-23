@@ -105,6 +105,8 @@ struct Sample {
     let date: Date
     /// Reported horizontal accuracy in metres, when the source gives one.
     let accuracy: Double?
+    /// The Photos library's identifier for the item, for showing its thumbnail.
+    let assetID: String
 }
 
 struct CellSummary: Identifiable {
@@ -113,6 +115,8 @@ struct CellSummary: Identifiable {
     var days = Set<DateComponents>()
     var first = Date.distantFuture
     var last = Date.distantPast
+    /// Every photo in the cell, for thumbnails: (date taken, Photos identifier).
+    var photos: [(date: Date, assetID: String)] = []
 }
 
 struct Binned {
@@ -145,6 +149,7 @@ func bin(_ samples: [Sample], size: CellSize, backend: H3Backend, calendar: Cale
         summary.days.insert(calendar.dateComponents([.year, .month, .day], from: sample.date))
         summary.first = min(summary.first, sample.date)
         summary.last = max(summary.last, sample.date)
+        summary.photos.append((sample.date, sample.assetID))
         result.cells[cell] = summary
     }
     return result
