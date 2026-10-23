@@ -11,7 +11,7 @@ Packages/h3o-ffi/CH3O.xcframework/
 *.xcodeproj/
 Sources/Hexmosphere/Info.plist
 Sources/Hexmosphere/Hexmosphere.entitlements
-Sources/HexmosphereiPad/Info.plist
+Sources/HexmosphereiOS/Info.plist
 ios/Sources/Info.plist
 
 # The downloaded H3 release (the sources used are in Packages/CH3)

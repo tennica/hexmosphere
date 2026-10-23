@@ -26,31 +26,92 @@ A photo whose reported horizontal accuracy is coarser than the cell's edge is le
 
 ## Build
 
-Needs Xcode (macOS 15 / iPadOS 17 or later as targets), [XcodeGen](https://github.com/yonaskolb/XcodeGen) and, for the default h3o backend, a [rustup](https://rustup.rs) toolchain with the iOS target.
+Hexmosphere builds on an Apple silicon Mac. The steps below start from a Mac with nothing installed.
+
+### 1. Xcode
+
+Install Xcode from the App Store (it targets macOS 15, and iOS and iPadOS 17, or later), then point the command-line tools at it and finish its first-run setup:
 
 ```bash
-# 1. The h3o library (always needed; both backends are built in)
-rustup target add aarch64-apple-ios
-Packages/h3o-ffi/build-xcframework.sh
-
-# 2. The Xcode project
-xcodegen generate
-
-# 3. The Mac app (signed to run locally)
-xcodebuild -project Hexmosphere.xcodeproj -scheme Hexmosphere -derivedDataPath build build
-open build/Build/Products/Debug/Hexmosphere.app
-
-# 4. The iPad and iPhone app (one target; needs your Apple team ID, Developer Mode on the device, and its UDID)
-xcodebuild -project Hexmosphere.xcodeproj -scheme HexmosphereiPad -derivedDataPath build \
-  -destination 'platform=iOS,id=<UDID>' -allowProvisioningUpdates DEVELOPMENT_TEAM=<team ID> build
-xcrun devicectl device install app --device <UDID> build/Build/Products/Debug-iphoneos/HexmosphereiPad.app
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+xcodebuild -runFirstLaunch
+xcodebuild -downloadPlatform iOS     # only for the iPad and iPhone app
 ```
 
-With a free Apple ID ("Personal Team"), an installed iPad or iPhone build stops launching after about 7 days until it's rebuilt and reinstalled.
+`xcode-select -p` should then print `/Applications/Xcode.app/Contents/Developer`. Until it's switched, it points at the Command Line Tools, and `xcodebuild` can't find Xcode.
+
+### 2. XcodeGen and Rust
+
+```bash
+brew install xcodegen
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh    # rustup, from rustup.rs
+rustup target add aarch64-apple-darwin aarch64-apple-ios
+```
+
+The Rust toolchain has to come from [rustup](https://rustup.rs): Homebrew's `rust` can't add the iOS target. If both are installed, the build script uses rustup's.
+
+### 3. The h3o library and the Xcode project
+
+```bash
+Packages/h3o-ffi/build-xcframework.sh    # builds CH3O.xcframework for the Mac and iOS
+xcodegen generate                        # writes Hexmosphere.xcodeproj from project.yml
+```
+
+Both H3 backends are always built in, so the Rust part is needed even if you only use H3 C. Run `xcodegen generate` again after adding or removing source files.
+
+### 4. Map data (optional)
+
+The repository carries a small base map. Roads and streets are fetched separately and bundled by the next build; see [Base map](#base-map):
+
+```bash
+scripts/fetch-basemap.sh roads                                          # world roads, 5.8 MB
+scripts/fetch-basemap.sh streets colorado 36.99 -109.06 41.01 -102.04   # a region's streets
+```
+
+### 5. The Mac app
+
+```bash
+xcodebuild -project Hexmosphere.xcodeproj -scheme Hexmosphere -derivedDataPath build build
+open build/Build/Products/Debug/Hexmosphere.app
+```
+
+It's signed to run locally, with no Apple ID needed.
+
+### 6. The iPad and iPhone app
+
+One target, `HexmosphereiOS`, builds for both. Its bundle ID includes your team ID (`net.tennica.hexmosphere.ios.<team ID>`), because Apple lets only one team register a given bundle ID; that way anyone can build their own copy without changing the project. It needs three things:
+
+1. **An Apple ID in Xcode.** Xcode → Settings → Accounts → **+**. A free Apple ID works; Xcode makes it a "Personal Team".
+2. **The device**, plugged in, unlocked and trusting this Mac, with **Developer Mode** on: Settings → Privacy & Security → Developer Mode, then restart and confirm. The switch only appears after Xcode has seen the device.
+3. **Two values for the commands below:**
+   - **The device's name**, as `xcrun devicectl list devices` shows it (the Name column, for example `rose`). Its UDID from the Identifier column works too.
+   - **Your team ID**, ten letters and digits. It's the `OU` of your "Apple Development" signing certificate, which Xcode creates when you add the Apple ID. This lists one line per certificate:
+
+     ```bash
+     security find-certificate -a -c "Apple Development" -p |
+       awk '/BEGIN/{c=""} {c=c $0 "\n"} /END/{cmd="openssl x509 -noout -subject"; printf "%s", c | cmd; close(cmd)}'
+     ```
+
+     A line looks like `CN=Apple Development: you@example.com (AB12CD34EF), OU=8XY9ZW7V6U, …`. The team ID is the `OU`, **not** the code in brackets after your email. With more than one Apple ID in Xcode there's a line for each; pick the one for the account you signed in with.
+
+Then build and install, putting your device's name and team ID in place of `rose` and `8XY9ZW7V6U`:
+
+```bash
+xcodebuild -project Hexmosphere.xcodeproj -scheme HexmosphereiOS -configuration Release \
+  -destination 'platform=iOS,name=rose' -derivedDataPath build \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=8XY9ZW7V6U build
+xcrun devicectl device install app --device rose build/Build/Products/Release-iphoneos/HexmosphereiOS.app
+```
+
+- `-allowProvisioningUpdates` lets Xcode register the device with your team and make the signing profile. The first build for a new device or team does this, and Xcode may ask for your keychain password.
+- `DEVELOPMENT_TEAM` is passed on the command line because the project leaves it blank, so it isn't tied to one person's account. Builds signed by different teams are different apps on the device, each with its own Photos permission; to update one app from two Macs, sign in to Xcode with the same Apple ID on both.
+- A Release build is worth it: Debug leaves the H3 C library unoptimised.
+- On first launch the device may refuse an app from an unknown developer. Trust it in Settings → General → VPN & Device Management.
+
+With a free Apple ID ("Personal Team"), an installed build stops launching after about 7 days until it's rebuilt and reinstalled.
 
 Earlier versions could also read individual photos chosen with the Photos picker, or files from a folder, without Photos library access. That code was removed once both apps moved to the whole library; it's in the git history.
-
-If the originals live only in iCloud ("Optimize Storage"), Photos has to download each one first, and that can be slow. In that case, exporting with location and using **Open Files…** works too.
 
 ## Base map
 
@@ -115,7 +176,7 @@ Roads aren't in the repository. To draw them, fetch Natural Earth's 1:10m roads 
 scripts/fetch-basemap.sh roads    # 56,600 roads; about 50 MB cached, 5.8 MB bundled
 ```
 
-This writes every road to `Basemap/roads/roads.bin` (gitignored), keeping only its kind, its line, and the zoom level Natural Earth suggests showing it from. Each map tile draws only the roads meant for its zoom: highways when zoomed out, smaller roads as you zoom in. Until the roads have proved affordable on every device, the summary line shows how long they took to load and the slowest tile draw so far.
+This writes every road to `Basemap/roads/roads.bin` (gitignored), keeping only its kind, its line, and the zoom level Natural Earth suggests showing it from. Each map tile draws only the roads meant for its zoom: highways when zoomed out, smaller roads as you zoom in. Until the roads have proved affordable on every device, a line under the summary shows how long they took to load and the slowest tile draw so far.
 
 ### Streets
 
@@ -132,7 +193,7 @@ The script asks the Overpass API for one 1° square at a time, caching each answ
 
 **Export Tiled…** saves the hexagons in view as a map for [Tiled](https://www.mapeditor.org), the open-source map editor whose files many game engines and WorkAdventure read. It writes a folder holding `hexmosphere.tmj` (Tiled's JSON format) and its tile image, `hexes.png`:
 
-- **photo count**: a hexagonal tile layer (pointy-top, rows staggered), shaded by photo count as on screen.
+- **photo count**: a hexagonal tile layer, shaded by photo count as on screen.
 - **places**: one point object per hexagon, of class `h3cell`, with its H3 index, centre latitude and longitude, photo and day counts, and first and last dates. The name is left blank for you to fill in: this is where a place database starts.
 
 H3's local I/J grid (`cellToLocalIj`) lays the cells out, so cells that are neighbours in H3 are neighbours in Tiled. That grid points a different way in each part of the world, so the export turns it to north up: a hex grid only turns cleanly in 60° steps, and Tiled's pointy-topped and flat-topped hexagons differ by 30°, so the app measures the cells' grid positions against the map and picks the step and hexagon kind that come closest. The result is within 15° of north (Denver comes out flat-topped, about 5° off). The map's properties record the H3 resolution, library, origin cell, centre and the turn left over. Only cells near enough to the centre for H3 to place are exported; the app says how many were left out. Both H3 libraries give identical coordinates (25,096 cells compared over seven places and five resolutions).
@@ -152,30 +213,34 @@ They agree. A comparison on 100,000 random points at resolutions 7, 9 and 11 fou
 
 An earlier version of this project vendored H3 C 4.1.0. Its average edge lengths were the older table, about 13% smaller, which H3 replaced in March 2023 ([uber/h3#749](https://github.com/uber/h3/pull/749)). h3o already had the current values.
 
-Building needs the Rust part either way: `Packages/h3o-ffi/build-xcframework.sh`, with a rustup toolchain that has `aarch64-apple-ios`.
+Building needs the Rust part either way (see [Build](#build), step 3).
 
 ## Layout
 
 - `Sources/Hexmosphere`: the app, shared by Mac, iPad and iPhone (SwiftUI; on an iPhone the toolbar packs into icons):
+  - `ContentView.swift`: toolbar, summary panel and export
+  - `LibraryLocations.swift`: reading the Photos library's metadata
   - `H3Grid.swift`: H3 wrappers for both backends, cell sizes, binning
-  - `HexMapView.swift`: MapKit, with one multipolygon per shade level
-  - `ContentView.swift`: controls and summary
-- `Packages/h3o-ffi`: a small Rust crate exposing three h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
+  - `HexMapView.swift`: MapKit, with one multipolygon per shade level and region
+  - `Basemap.swift`, `Roads.swift`: the offline base map, roads and streets
+  - `Thumbnails.swift`: photo previews for a selected hexagon
+  - `TiledExport.swift`, `TiledLayout.swift`: the Tiled export and its north-up hex layout
+- `Packages/h3o-ffi`: a small Rust crate exposing four h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
 - `Packages/CH3`: Uber's H3 v4.5.0 C library, vendored unchanged as a SwiftPM C target (Apache-2.0; `LICENSE-h3`). `include/h3api.h` is generated from `h3api.h.in` with the version filled in. Source: the v4.5.0 release tarball, sha256 `0da8a392a6ff77e76b60e6a331a49497d0935b6b7b6899da7a3e2786139b0441`.
-- `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
-- `Basemap/`: the offline base map data, fetched by `scripts/fetch-basemap.sh` and drawn by `Sources/Hexmosphere/Basemap.swift`:
+- `Basemap/`: the offline base map data, drawn by `Basemap.swift` and `Roads.swift`:
   - `naturalearth/`: public domain
-  - `naturalearth-extra/`: local caches only, gitignored
-  - `osm/`: ODbL, with its own `LICENSE.md`
-- `tools/landcells.c`: the land-filling tool, built and run by `scripts/build-land-cells.sh`
-- `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiPad` for iPad and iPhone, keeping its original name and bundle ID)
+  - `osm/`: OpenStreetMap places, ODbL, with its own `LICENSE.md`
+  - `h3/`: the land as compacted H3 cells
+  - `naturalearth-extra/`, `roads/`, `streets/`: fetched locally, gitignored (streets are OpenStreetMap data, ODbL)
+- `scripts/fetch-basemap.sh`: fetches all of the base map data; `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells
+- `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
+- `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiOS` for iPad and iPhone)
 
 ## Ideas for later
 
-- Workout routes from HealthKit (iPad), and Core Location visit monitoring going forward
+- Workout routes from HealthKit, and Core Location visit monitoring going forward
 - A time filter by year or month
 - A RealityKit globe view
-- Tapping a cell to show its photos
 
 ## License
 

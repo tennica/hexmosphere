@@ -44,7 +44,7 @@ targets:
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: NO
         GENERATE_INFOPLIST_FILE: NO
-  HexmosphereiPad:
+  HexmosphereiOS:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
@@ -59,7 +59,7 @@ targets:
       - framework: Packages/h3o-ffi/CH3O.xcframework
         embed: false
     info:
-      path: Sources/HexmosphereiPad/Info.plist
+      path: Sources/HexmosphereiOS/Info.plist
       properties:
         CFBundleDisplayName: Hexmosphere
         UILaunchScreen: {}
@@ -76,9 +76,10 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere.ipad
-        # iPad and iPhone; the bundle ID keeps its old ".ipad" name so the
-        # installed app carries on (and a free team doesn't spend a new App ID).
+        # The signing team is part of the bundle ID, so whoever builds it (with
+        # DEVELOPMENT_TEAM=<team ID>) gets an App ID of their own: Apple lets
+        # only one team register any given bundle ID.
+        PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere.ios.$(DEVELOPMENT_TEAM)
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.0"
         # One signed binary per build (no separate debug and preview dylibs), so
