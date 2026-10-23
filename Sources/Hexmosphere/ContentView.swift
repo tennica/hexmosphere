@@ -59,16 +59,21 @@ struct ContentView: View {
                 }
             }
 
-            Text(summary(binned))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-            if !appleMap {
-                RoadTimes()
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
+            // A panel of its own under the map, with room to read the counts
+            // and timings while building up places.
+            VStack(alignment: .leading, spacing: 8) {
+                Text(summary(binned))
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !appleMap {
+                    RoadTimes()
+                }
             }
+            .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
         }
         .onChange(of: size) { selected = nil; rebin() }
         .onChange(of: backend) { selected = nil; rebin() }
@@ -153,7 +158,7 @@ struct RoadTimes: View {
     var body: some View {
         if let loadTime = stats.loadTime {
             Text(text(loadTime))
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
