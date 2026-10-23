@@ -14,6 +14,12 @@
 #   scripts/fetch-basemap.sh places <name> <south> <west> <north> <east>
 #       Add OpenStreetMap place names for a region (one Overpass API query).
 #
+#   scripts/fetch-basemap.sh streets <name> <south> <west> <north> <east>
+#       Fetch every OpenStreetMap street in a region, from motorways down to
+#       residential streets (no service roads, tracks or paths), in 1° squares
+#       from the Overpass API, cached in ~/Library/Caches/hexmosphere/osm. Writes
+#       Basemap/streets/streets-<name>.bin (gitignored), in the roads.bin format.
+#
 #   scripts/fetch-basemap.sh roads
 #       Cache Natural Earth's 1:10m roads (about 50 MB, 56,600 roads) and write
 #       every road to Basemap/roads/roads.bin (gitignored), keeping only its kind,
@@ -79,6 +85,69 @@ with open(sys.argv[2], "wb") as out:
 print(f"roads: {len(roads)} roads, {points} points")
 PY
   du -h Basemap/roads/roads.bin
+}
+
+# One Overpass query, retried with longer waits when the public server is busy.
+overpass() {
+  local query=$1 out=$2
+  for wait in 0 30 60 120 240; do
+    sleep "$wait"
+    if curl -fsSL --max-time 400 -A "$UA" --data-urlencode "data=$query" \
+         https://overpass-api.de/api/interpreter -o "$out.part"; then
+      mv "$out.part" "$out"
+      return 0
+    fi
+    echo "Overpass busy; retrying after a longer wait" >&2
+  done
+  return 1
+}
+
+fetch_streets() {
+  local name=$1 south=$2 west=$3 north=$4 east=$5
+  local cache=${HEXMOSPHERE_CACHE:-$HOME/Library/Caches/hexmosphere}/osm/streets-$name
+  mkdir -p "$cache" Basemap/streets
+  local classes="motorway|trunk|primary|secondary|tertiary|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|unclassified|residential|living_street|pedestrian"
+  local squares
+  squares=$(python3 -I -c '
+import math, sys
+s, w, n, e = map(float, sys.argv[1:])
+for lat in range(math.floor(s), math.ceil(n)):
+    for lng in range(math.floor(w), math.ceil(e)):
+        print(max(s, lat), max(w, lng), min(n, lat + 1), min(e, lng + 1))
+' "$south" "$west" "$north" "$east")
+  while read -r s w n e; do
+    local file="$cache/$s,$w.json"
+    [ -s "$file" ] && continue
+    echo "streets $name: $s,$w" >&2
+    overpass "[out:json][timeout:300];way[\"highway\"~\"^($classes)\$\"]($s,$w,$n,$e);out geom;" "$file"
+  done <<< "$squares"
+  python3 -I - "$cache" "Basemap/streets/streets-$name.bin" <<'PY'
+import glob, json, struct, sys
+# Kind (as in roads.bin) and the zoom level to show each class from.
+classes = {
+    "motorway": (0, 5), "trunk": (0, 6), "motorway_link": (0, 11), "trunk_link": (0, 11),
+    "primary": (1, 8), "primary_link": (1, 12), "secondary": (1, 9), "secondary_link": (1, 12),
+    "tertiary": (2, 11), "tertiary_link": (2, 13), "unclassified": (2, 12),
+    "residential": (2, 14), "living_street": (2, 14), "pedestrian": (2, 14),
+}
+ways = {}
+for path in sorted(glob.glob(f"{sys.argv[1]}/*.json")):
+    for element in json.load(open(path))["elements"]:
+        if element.get("type") == "way" and element.get("geometry"):
+            ways[element["id"]] = element   # a way crossing squares comes back in each
+points = 0
+with open(sys.argv[2], "wb") as out:
+    out.write(struct.pack("<I", len(ways)))
+    for way in ways.values():
+        kind, zoom = classes.get(way["tags"].get("highway"), (2, 14))
+        line = [(p["lon"], p["lat"]) for p in way["geometry"]]
+        out.write(struct.pack("<BBH", kind, zoom * 10, 1))
+        out.write(struct.pack("<I", len(line)))
+        out.write(struct.pack(f"<{len(line) * 2}f", *(c for point in line for c in point)))
+        points += len(line)
+print(f"streets: {len(ways)} streets, {points} points")
+PY
+  du -h "Basemap/streets/streets-$name.bin"
 }
 
 fetch_places() {
@@ -157,5 +226,6 @@ case "${1:-}" in
   naturalearth) fetch_scale "${2:?scale: 110m, 50m or 10m}" ;;
   places) shift; fetch_places "$@" ;;
   roads) fetch_roads ;;
-  *) echo "usage: $0 [naturalearth <110m|50m|10m> | places <name> <south> <west> <north> <east> | roads]" >&2; exit 2 ;;
+  streets) shift; fetch_streets "$@" ;;
+  *) echo "usage: $0 [naturalearth <110m|50m|10m> | places|streets <name> <south> <west> <north> <east> | roads]" >&2; exit 2 ;;
 esac

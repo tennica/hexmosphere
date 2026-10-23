@@ -136,6 +136,15 @@ struct HexMapView: PlatformViewRepresentable {
                 coordinator.baseOverlays.append(places)
                 coordinator.places = places
             }
+            // The map has usually drawn its first tiles by now, and MapKit
+            // doesn't add new overlays to tiles already on screen until the
+            // map moves, so ask every base layer to draw (as for the cells).
+            let added = coordinator.baseOverlays
+            DispatchQueue.main.async { [weak map] in
+                for overlay in added {
+                    map?.renderer(for: overlay)?.setNeedsDisplay()
+                }
+            }
         }
     }
 

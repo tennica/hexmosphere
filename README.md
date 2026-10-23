@@ -117,6 +117,17 @@ scripts/fetch-basemap.sh roads    # 56,600 roads; about 50 MB cached, 5.8 MB bun
 
 This writes every road to `Basemap/roads/roads.bin` (gitignored), keeping only its kind, its line, and the zoom level Natural Earth suggests showing it from. Each map tile draws only the roads meant for its zoom: highways when zoomed out, smaller roads as you zoom in. Until the roads have proved affordable on every device, the summary line shows how long they took to load and the slowest tile draw so far.
 
+### Streets
+
+For street-level detail in a region, fetch its OpenStreetMap streets (ODbL), from motorways down to residential streets:
+
+```bash
+scripts/fetch-basemap.sh streets colorado 36.99 -109.06 41.01 -102.04
+# 303,876 streets, 3.9 million points: about 400 MB cached, 33 MB bundled
+```
+
+The script asks the Overpass API for one 1° square at a time, caching each answer in `~/Library/Caches/hexmosphere/osm`, and writes `Basemap/streets/streets-<name>.bin` (gitignored) in the roads format. Each street class appears from a zoom level that suits it. Map zoom levels aren't H3 resolutions: zoom 14, when residential streets appear, shows about 8 km across an iPad at Denver's latitude, where a 2.4 km (resolution 7) hexagon is about 300 points wide. Motorways appear from zoom 5, primary and secondary roads from 8–9, tertiary from 11. Inside a region with streets, Natural Earth's coarse roads give way to them from zoom 10.
+
 ## H3 backend (switch in the app)
 
 Both H3 implementations are built in, and the **h3o / H3 C** switch in the toolbar picks one:

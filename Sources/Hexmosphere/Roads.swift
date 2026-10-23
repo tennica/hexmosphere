@@ -1,22 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
-// Natural Earth's 1:10m roads, all of them, from Basemap/roads/roads.bin
-// (scripts/fetch-basemap.sh roads). Each road carries the zoom level Natural
-// Earth suggests showing it from, and a tile draws only the roads worth seeing
-// at its zoom. Load and draw times are kept in RoadStats for the summary line.
+// Roads and streets: Natural Earth's 1:10m roads from Basemap/roads/roads.bin
+// (scripts/fetch-basemap.sh roads), and OpenStreetMap streets for chosen regions
+// from Basemap/streets/streets-<name>.bin (fetch-basemap.sh streets), in the same
+// format. Each road carries the zoom level to show it from, and a tile draws
+// only the roads worth seeing at its zoom. Where detailed streets exist, the
+// coarse Natural Earth roads give way to them once zoomed in. Load and draw
+// times are kept in RoadStats for the summary line.
 
 import Foundation
 import MapKit
 import Observation
 
 /// A short piece of one road. Roads are cut into pieces of at most 16 points,
-/// so a tile draws only the pieces it touches, not whole highways.
+/// so a tile draws only the pieces it touches, not whole highways. The points
+/// live in their overlay's one shared array; a piece is a range of it.
 struct Road {
     enum Kind: UInt8 { case major = 0, secondary, other, ferry }
     let kind: Kind
     /// Web map zoom level (0 = whole world in one 256-point tile) to draw it from.
     let minZoom: Double
     let rect: MKMapRect
-    let points: [MKMapPoint]
+    let points: Range<Int>
 
     static let pieceLength = 16
 }
@@ -24,20 +28,36 @@ struct Road {
 /// The roads in one region of the world, so a tile only looks at nearby roads.
 final class Roads: NSObject, MKOverlay {
     let roads: [Road]
+    /// Every piece's points, back to back.
+    let points: [MKMapPoint]
     let boundingMapRect: MKMapRect
+    /// Areas with detailed streets, where these roads aren't drawn from
+    /// `hiddenFromZoom` in (set on Natural Earth's roads only).
+    var hiddenWithin: [MKMapRect] = []
+    static let hiddenFromZoom = 10.0
 
-    init(_ roads: [Road]) {
-        self.roads = roads
+    /// Copies the given pieces' points out of `source` into this overlay's own array.
+    init(_ pieces: [Road], from source: [MKMapPoint]) {
+        var points: [MKMapPoint] = []
+        points.reserveCapacity(pieces.reduce(0) { $0 + $1.points.count })
+        roads = pieces.map { piece in
+            let start = points.count
+            points.append(contentsOf: source[piece.points])
+            return Road(kind: piece.kind, minZoom: piece.minZoom, rect: piece.rect, points: start..<points.count)
+        }
+        self.points = points
         boundingMapRect = roads.reduce(MKMapRect.null) { $0.union($1.rect) }
     }
 
     var coordinate: CLLocationCoordinate2D { MKMapPoint(x: boundingMapRect.midX, y: boundingMapRect.midY).coordinate }
 
-    /// Reads roads.bin (format in scripts/fetch-basemap.sh) and groups the roads
-    /// on a 16×16 grid over the world.
-    static func load(_ url: URL) -> [Roads] {
+    /// Reads a roads file (format in scripts/fetch-basemap.sh) and groups the
+    /// pieces on a grid over the world, `side` squares each way: coarse for
+    /// worldwide roads, fine for a region's dense streets.
+    static func load(_ url: URL, side: Int) -> [Roads] {
         let clock = ContinuousClock()
         var pieces: [Road] = []
+        var all: [MKMapPoint] = []
         var roadCount = 0
         var points = 0
         let took = clock.measure {
@@ -59,24 +79,23 @@ final class Roads: NSObject, MKOverlay {
                     let partCount = Int(read(UInt16.self))
                     for _ in 0..<partCount {
                         let pointCount = Int(read(UInt32.self))
-                        var part: [MKMapPoint] = []
-                        part.reserveCapacity(pointCount)
+                        let first = all.count
                         for _ in 0..<pointCount {
                             let longitude = readFloat(), latitude = readFloat()
-                            part.append(MKMapPoint(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)))
+                            all.append(MKMapPoint(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)))
                         }
                         points += pointCount
                         // Neighbouring pieces share an end point, so the line stays joined.
-                        var start = 0
-                        while start < pointCount - 1 {
-                            let end = min(start + Road.pieceLength, pointCount)
-                            let piece = Array(part[start..<end])
+                        var start = first
+                        while start < first + pointCount - 1 {
+                            let end = min(start + Road.pieceLength, first + pointCount)
+                            let piece = all[start..<end]
                             let xs = piece.map(\.x), ys = piece.map(\.y)
                             // At least one map point across, so straight north–south or east–west
                             // pieces still count as touching a tile.
                             let rect = MKMapRect(x: xs.min()!, y: ys.min()!,
                                                  width: max(1, xs.max()! - xs.min()!), height: max(1, ys.max()! - ys.min()!))
-                            pieces.append(Road(kind: kind, minZoom: minZoom, rect: rect, points: piece))
+                            pieces.append(Road(kind: kind, minZoom: minZoom, rect: rect, points: start..<end))
                             start = end - 1
                         }
                     }
@@ -86,15 +105,14 @@ final class Roads: NSObject, MKOverlay {
         }
         RoadStats.shared.loaded(roads: roadCount, points: points, took: took)
 
-        let side = 16.0
         let world = MKMapRect.world
         var groups: [Int: [Road]] = [:]
         for road in pieces {
-            let column = min(Int(side) - 1, max(0, Int((road.rect.midX - world.minX) / world.width * side)))
-            let row = min(Int(side) - 1, max(0, Int((road.rect.midY - world.minY) / world.height * side)))
-            groups[row * Int(side) + column, default: []].append(road)
+            let column = min(side - 1, max(0, Int((road.rect.midX - world.minX) / world.width * Double(side))))
+            let row = min(side - 1, max(0, Int((road.rect.midY - world.minY) / world.height * Double(side))))
+            groups[row * side + column, default: []].append(road)
         }
-        return groups.values.map(Roads.init)
+        return groups.values.map { Roads($0, from: all) }
     }
 }
 
@@ -117,13 +135,17 @@ final class RoadsRenderer: MKOverlayRenderer {
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
         let started = ContinuousClock.now
         let zoom = log2(Double(zoomScale) * MKMapRect.world.width / 256)
+        if zoom >= Roads.hiddenFromZoom, roads.hiddenWithin.contains(where: { $0.contains(mapRect) }) { return }
         // Widen the tile a little so lines along its edge aren't cut off.
         let area = mapRect.insetBy(dx: -4 / Double(zoomScale), dy: -4 / Double(zoomScale))
         var paths: [Road.Kind: CGMutablePath] = [:]
         var drawn = 0
         for road in roads.roads where road.minZoom <= zoom && road.rect.intersects(area) {
             let path = paths[road.kind] ?? CGMutablePath()
-            path.addLines(between: road.points.map { point(for: $0) })
+            path.move(to: point(for: roads.points[road.points.lowerBound]))
+            for index in road.points.dropFirst() {
+                path.addLine(to: point(for: roads.points[index]))
+            }
             paths[road.kind] = path
             drawn += 1
         }
@@ -161,11 +183,12 @@ final class RoadsRenderer: MKOverlayRenderer {
     private var pendingBusiest = 0
     private var publishScheduled = false
 
+    /// Called once per roads or streets file; the totals add up.
     func loaded(roads: Int, points: Int, took: Duration) {
         DispatchQueue.main.async {
-            self.roads = roads
-            self.points = points
-            self.loadTime = took
+            self.roads += roads
+            self.points += points
+            self.loadTime = (self.loadTime ?? .zero) + took
         }
     }
 

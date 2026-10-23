@@ -272,7 +272,20 @@ struct Basemap {
         let land = landCells()
         basemap.overlays += land
         let roadsURL = root.appendingPathComponent("roads/roads.bin")
-        let roads = FileManager.default.fileExists(atPath: roadsURL.path) ? Roads.load(roadsURL) : []
+        let worldRoads = FileManager.default.fileExists(atPath: roadsURL.path) ? Roads.load(roadsURL, side: 16) : []
+        let streetFiles = ((try? FileManager.default.contentsOfDirectory(
+            at: root.appendingPathComponent("streets"), includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.lastPathComponent.hasPrefix("streets-") && $0.pathExtension == "bin" }
+        var streets: [Roads] = []
+        var covered: [MKMapRect] = []
+        for file in streetFiles {
+            // About 1.4° squares, so a tile looks at only a few thousand pieces.
+            let region = Roads.load(file, side: 256)
+            streets += region
+            covered.append(region.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) })
+        }
+        for overlay in worldRoads { overlay.hiddenWithin = covered }
+        let roads: [MKOverlay] = worldRoads + streets
         for (name, style) in layerStyles {
             // Roads go above water and rivers, below borders and other lines.
             if name == "geographic_lines" { basemap.overlays += roads }
