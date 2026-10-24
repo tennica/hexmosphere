@@ -1,6 +1,6 @@
 # From hexagons to Inform rooms
 
-*An idea, not a feature: nothing here is built yet.*
+*The first part of this is now built, outside the app:* [inform-federation](https://github.com/SCUPPERfoundation/inform-federation) *turns a Tiled export into Inform 7 rooms with exits by hexagon side, then into a planet for two generations of the game Federation (its [hexmosphere-planets](https://github.com/SCUPPERfoundation/inform-federation/blob/main/docs/hexmosphere-planets.md) chapter). Regions from H3 sizes are not built yet. This page is the original idea.*
 
 Hexmosphere finds the places your photos come from and indexes them as H3 hexagons. [Inform 7](https://ganelson.github.io/inform-website/) describes a story's world as rooms joined by exits. The two models turn out to fit closely, and most of the pieces a converter would need already exist in the app because of the [Tiled export](../README.md#exporting-to-tiled).
 

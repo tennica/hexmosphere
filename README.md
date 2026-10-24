@@ -200,7 +200,7 @@ H3's local I/J grid (`cellToLocalIj`) lays the cells out, so cells that are neig
 
 The export holds where and when you took photos, at the chosen cell size, and leaves the device only when you save it. It doesn't include Photos library identifiers. On the Mac, saving it uses the sandbox's user-selected read-write file access.
 
-An idea for what comes after naming places in Tiled, turning them into an Inform 7 story's rooms, regions and exits, is written up in [docs/inform.md](docs/inform.md).
+What comes after naming places in Tiled, turning them into an Inform 7 story's rooms, regions and exits, is written up in [docs/inform.md](docs/inform.md). [inform-federation](https://github.com/SCUPPERfoundation/inform-federation) builds the rooms and exits, and goes on to make planets for the game Federation.
 
 ## H3 backend (switch in the app)
 
@@ -237,7 +237,7 @@ Building needs the Rust part either way (see [Build](#build), step 3).
 - `scripts/fetch-basemap.sh`: fetches all of the base map data; `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells
 - `tools/make-icon.swift`: draws the app icon (a cell and its six neighbours in rainbow colours, inside a circle) into `Sources/Hexmosphere/Assets.xcassets`; the command is at the top of the file
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
-- `docs/inform.md`: an idea, not built: hexagons as Inform 7 rooms, H3 sizes as regions, neighbours as compass exits
+- `docs/inform.md`: hexagons as Inform 7 rooms, H3 sizes as regions, neighbours as compass exits (rooms and exits built in inform-federation)
 - `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiOS` for iPad and iPhone)
 
 ## Ideas for later
