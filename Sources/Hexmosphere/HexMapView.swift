@@ -37,6 +37,19 @@ struct HexMapView: PlatformViewRepresentable {
         0.15 + 0.7 * Double(level + 1) / Double(levels)
     }
 
+    /// The map's colour for a shade level: a ramp from pale yellow (few photos) to deep
+    /// red (many), so busy places stand out by hue as well as opacity when thousands of
+    /// cells are on screen. The Tiled export keeps its single orange.
+    static func color(_ level: Int) -> PlatformColor {
+        let t = Double(level) / Double(levels - 1)
+        return PlatformColor(hue: 0.15 * (1 - t), saturation: 0.55 + 0.4 * t,
+                             brightness: 1.0 - 0.25 * t, alpha: alpha(level))
+    }
+
+    /// Cells at the sparsest levels get no outline: drawn over a whole library, their
+    /// outlines merge into a lattice that hides the busier cells.
+    static let outlinedFrom = 2
+
     func makeCoordinator() -> Coordinator { Coordinator(onSelect: onSelect, visible: visible) }
 
     #if os(macOS)
@@ -184,10 +197,14 @@ struct HexMapView: PlatformViewRepresentable {
             if let base = basemapRenderer(for: overlay) { return base }
             guard let cells = overlay as? ShadedCells else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKMultiPolygonRenderer(multiPolygon: cells)
-            let alpha = HexMapView.alpha(cells.level)
-            renderer.fillColor = PlatformColor.systemOrange.withAlphaComponent(alpha)
-            renderer.strokeColor = PlatformColor.systemOrange.withAlphaComponent(0.9)
-            renderer.lineWidth = 0.8
+            let color = HexMapView.color(cells.level)
+            renderer.fillColor = color
+            if cells.level >= HexMapView.outlinedFrom {
+                renderer.strokeColor = color.withAlphaComponent(0.9)
+                renderer.lineWidth = 0.6
+            } else {
+                renderer.lineWidth = 0
+            }
             return renderer
         }
 
