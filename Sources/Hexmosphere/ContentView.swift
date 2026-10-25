@@ -23,6 +23,8 @@ struct ContentView: View {
     @State private var exporting = false
     /// What the last export did, shown under the summary.
     @State private var exportNote: String?
+    /// The hexagon you're in, when Where I Am is on. Never stored or exported.
+    @State private var here = HereTracker()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,7 +43,7 @@ struct ContentView: View {
             .padding(10)
 
             ZStack(alignment: .bottomLeading) {
-                HexMapView(binned: binned, size: size, onSelect: { selected = $0 }, visible: visible)
+                HexMapView(binned: binned, size: size, onSelect: { selected = $0 }, visible: visible, here: here.cell)
                 if let selected {
                     CellCard(cell: selected).padding(12)
                 }
@@ -62,6 +64,11 @@ struct ContentView: View {
                 Text(summary(binned))
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
+                if here.on {
+                    Text(hereText)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 if let exportNote {
                     Text(exportNote)
                         .font(.callout)
@@ -89,8 +96,8 @@ struct ContentView: View {
                 exportNote = "Export failed: \(error.localizedDescription)"
             }
         }
-        .onChange(of: size) { selected = nil; rebin() }
-        .onChange(of: backend) { selected = nil; rebin() }
+        .onChange(of: size) { selected = nil; rebin(); here.use(size: size, backend: backend) }
+        .onChange(of: backend) { selected = nil; rebin(); here.use(size: size, backend: backend) }
         .onChange(of: samples.count) { rebin() }
     }
 
@@ -100,6 +107,8 @@ struct ContentView: View {
         Divider().frame(height: 20)
         sizePicker.pickerStyle(.segmented).fixedSize()
         backendPicker.pickerStyle(.segmented).fixedSize()
+        Divider().frame(height: 20)
+        hereButton
     }
 
     private func clear() {
@@ -142,9 +151,26 @@ struct ContentView: View {
                 .disabled(samples.isEmpty && tally.chosen == 0)
             size()
             backendPicker.pickerStyle(.segmented).fixedSize()
+            hereButton.labelStyle(.iconOnly)
             exportButton.labelStyle(.iconOnly)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var hereButton: some View {
+        Toggle(isOn: Binding(get: { here.on }, set: { $0 ? here.start(size: size, backend: backend) : here.stop() })) {
+            Label("Where I Am", systemImage: here.on ? "location.fill" : "location")
+        }
+        .toggleStyle(.button)
+        .help("Outline the hexagon you're in. Asks for your location while the app is in use. Your position is never saved, exported or sent.")
+    }
+
+    /// The line under the summary while Where I Am is on.
+    private var hereText: String {
+        if let note = here.note { return note }
+        guard let cell = here.cell else { return "Finding where you are…" }
+        let photos = binned.cells[cell].map { " · \($0.days.count) days and \($0.samples) photos here" } ?? " · no photos here yet"
+        return "You're in the outlined hexagon, \(cellName(cell))\(photos). It isn't saved or exported."
     }
 
     private var exportButton: some View {

@@ -22,6 +22,8 @@ struct HexMapView: PlatformViewRepresentable {
     let onSelect: (CellSummary?) -> Void
     /// Where the map is looking, kept up to date for exporting the visible area.
     let visible: VisibleArea
+    /// The hexagon you're in, when Where I Am is on: outlined above the photos' cells.
+    var here: CellID? = nil
 
     static let levels = 6
 
@@ -66,6 +68,7 @@ struct HexMapView: PlatformViewRepresentable {
         coordinator.binned = binned
         coordinator.size = size
         coordinator.onSelect = onSelect
+        showHere(map, coordinator)
         // SwiftUI calls this for any change in the window; rebuild the cells
         // only when they changed, or redrawing them can feed back into here.
         guard coordinator.drawnID != binned.id else { return }
@@ -98,6 +101,15 @@ struct HexMapView: PlatformViewRepresentable {
                 coordinator.hexOverlays.append(overlay)
             }
         }
+        // The cells just went in under the place names, so put the hexagon you're in back above them.
+        if let hereOverlay = coordinator.hereOverlay {
+            map.removeOverlay(hereOverlay)
+            if let places = coordinator.places {
+                map.insertOverlay(hereOverlay, below: places)
+            } else {
+                map.addOverlay(hereOverlay, level: .aboveLabels)
+            }
+        }
 
         // MapKit doesn't always draw overlays added to tiles already on screen
         // until the map moves, so ask every cell renderer to draw once the
@@ -108,6 +120,27 @@ struct HexMapView: PlatformViewRepresentable {
                 map?.renderer(for: overlay)?.setNeedsDisplay()
             }
         }
+    }
+
+    /// Outlines the hexagon you're in, replacing the last one only when it changes.
+    private func showHere(_ map: MKMapView, _ coordinator: Coordinator) {
+        guard coordinator.hereCell != here || coordinator.hereBackend != binned.backend else { return }
+        coordinator.hereCell = here
+        coordinator.hereBackend = binned.backend
+        if let old = coordinator.hereOverlay {
+            map.removeOverlay(old)
+            coordinator.hereOverlay = nil
+        }
+        guard let here else { return }
+        let corners = outline(of: here, backend: binned.backend)
+        guard corners.count >= 3 else { return }
+        let overlay = HereCell(coordinates: corners, count: corners.count)
+        if let places = coordinator.places {
+            map.insertOverlay(overlay, below: places)
+        } else {
+            map.addOverlay(overlay, level: .aboveLabels)
+        }
+        coordinator.hereOverlay = overlay
     }
 
     /// Covers Apple's map with the bundled offline base map. Apple's map is
@@ -159,6 +192,8 @@ struct HexMapView: PlatformViewRepresentable {
         var level = 0
     }
 
+    final class HereCell: MKPolygon {}
+
     final class Coordinator: NSObject, MKMapViewDelegate {
         var binned = Binned()
         var size = CellSize.r7
@@ -168,6 +203,9 @@ struct HexMapView: PlatformViewRepresentable {
         /// The place-name overlay, kept on top of the cells.
         var places: MKOverlay?
         var onSelect: (CellSummary?) -> Void
+        var hereCell: CellID?
+        var hereBackend: H3Backend?
+        var hereOverlay: HereCell?
 
         let visible: VisibleArea
 
@@ -182,6 +220,13 @@ struct HexMapView: PlatformViewRepresentable {
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let base = basemapRenderer(for: overlay) { return base }
+            if let here = overlay as? HereCell {
+                let renderer = MKPolygonRenderer(polygon: here)
+                renderer.fillColor = PlatformColor.systemBlue.withAlphaComponent(0.2)
+                renderer.strokeColor = PlatformColor.systemBlue
+                renderer.lineWidth = 3
+                return renderer
+            }
             guard let cells = overlay as? ShadedCells else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKMultiPolygonRenderer(multiPolygon: cells)
             let alpha = HexMapView.alpha(cells.level)

@@ -25,6 +25,8 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
         com.apple.security.personal-information.photos-library: true
+        # Where I Am: the hexagon you're in, while the app is open.
+        com.apple.security.personal-information.location: true
         # Saving a Tiled export where the user chooses.
         com.apple.security.files.user-selected.read-write: true
     info:
@@ -33,6 +35,8 @@ targets:
         CFBundleDisplayName: Hexmosphere
         LSApplicationCategoryType: public.app-category.utilities
         NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this Mac unless you export it.
+        NSLocationUsageDescription: Hexmosphere outlines the hexagon you're in when you turn on Where I Am. It uses your location only while the app is open, and never saves, exports or sends it.
+        NSLocationWhenInUseUsageDescription: Hexmosphere outlines the hexagon you're in when you turn on Where I Am. It uses your location only while the app is open, and never saves, exports or sends it.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.tennica.hexmosphere
@@ -66,6 +70,7 @@ targets:
         CFBundleDisplayName: Hexmosphere
         UILaunchScreen: {}
         NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this device unless you export it.
+        NSLocationWhenInUseUsageDescription: Hexmosphere outlines the hexagon you're in when you turn on Where I Am. It uses your location only while the app is open, and never saves, exports or sends it.
         PHPhotoLibraryPreventAutomaticLimitedAccessAlert: true
         UISupportedInterfaceOrientations~iphone:
           - UIInterfaceOrientationPortrait

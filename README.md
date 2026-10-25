@@ -217,6 +217,15 @@ An earlier version of this project vendored H3 C 4.1.0. Its average edge lengths
 
 Building needs the Rust part either way (see [Build](#build), step 3).
 
+## Where I Am
+
+**Where I Am** in the toolbar outlines the hexagon you're in, at the chosen cell size, and
+the summary says how many days and photos you have there. It asks for your location only
+when you turn it on, and only while the app is in use. While it's on, the app holds the last
+fix in memory, to place you again if you change the cell size; turning it off forgets it.
+Your position is never written to disk, never in a Tiled export, and never sent anywhere. As with photos, a fix less precise than the cell is wide places you in no hexagon,
+so the smallest size waits for a good fix. The older iPad build (`ios/`) doesn't have it.
+
 ## Layout
 
 - `Sources/Hexmosphere`: the app, shared by Mac, iPad and iPhone (SwiftUI; on an iPhone the toolbar packs into icons):
@@ -224,6 +233,7 @@ Building needs the Rust part either way (see [Build](#build), step 3).
   - `LibraryLocations.swift`: reading the Photos library's metadata
   - `H3Grid.swift`: H3 wrappers for both backends, cell sizes, binning
   - `HexMapView.swift`: MapKit, with one multipolygon per shade level and region
+  - `HereTracker.swift`: Where I Am, Core Location turned into the hexagon you're in
   - `Basemap.swift`, `Roads.swift`: the offline base map, roads and streets
   - `Thumbnails.swift`: photo previews for a selected hexagon
   - `TiledExport.swift`, `TiledLayout.swift`: the Tiled export and its north-up hex layout
@@ -242,7 +252,7 @@ Building needs the Rust part either way (see [Build](#build), step 3).
 
 ## Ideas for later
 
-- Workout routes from HealthKit, and Core Location visit monitoring going forward
+- Workout routes from HealthKit, and a trail of where you've been, kept on the device
 - A time filter by year or month
 - A RealityKit globe view
 
