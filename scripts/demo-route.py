@@ -3,11 +3,11 @@
 """Make a Demo Drive route from the streets fetched for the base map.
 
     demo-route.py <overpass-folder | osmium.geojsonseq> <out.json> --title T --speed M/S --times N
-                  (--name NAME… | --ref REF [--also REF]) --from LAT,LON [--via LAT,LON…] --to LAT,LON
-                  [--connect] [--gap METRES] [--note TEXT]
+                  [--name NAME…] [--ref REF…] [--also REF…] --from LAT,LON [--via LAT,LON…] --to LAT,LON
+                  [--connect] [--gap METRES] [--link METRES] [--note TEXT]
 
 Takes the OpenStreetMap ways named any of the NAMEs (repeat --name for a route that turns
-from street to street), or whose ref list includes REF (e.g. "CA 1" also matches
+from street to street) or whose ref list includes any of the REFs (e.g. "CA 1" also matches
 "US 101;CA 1"), joins them into a graph at shared points, and keeps the shortest path from
 the point nearest --from, through the points nearest each --via in turn, to --to. Ways with the --also ref
 count three times their length, so the path takes them only where the main ref has no
@@ -17,7 +17,10 @@ unless given; keep it small in a city, where dead ends abound) are joined by a s
 line counted at three times its length. With --connect, every other street is in the graph
 too at five times its length, so a route through a city keeps to its named streets and
 takes another only for a short link between them. --from, --via and --to snap to the
-named or ref'd ways, never to a connecting street. The path is simplified to about 5 m and written as JSON for the app:
+named or ref'd ways, never to a connecting street. With --link, each point of the main
+ways is also joined to the nearest point of an --also way within that distance, standing in
+for the interchange ramps (which carry no ref) where an old road meets the interstate that
+replaced it. The path is simplified to about 5 m and written as JSON for the app:
 {"title", "speed" (metres a second in real life), "times" (how much faster the demo runs),
 "note", "points": [[lon, lat], …]}.
 """
@@ -28,12 +31,14 @@ import heapq
 import json
 import math
 import os
+from collections import defaultdict
 
 TOLERANCE = 0.00005  # degrees, about 5 m
 
 
-def ways(source):
-    """(tags, [(lon, lat), …]) for each street."""
+def ways(source, needles=None):
+    """(tags, [(lon, lat), …]) for each street. With needles, a GeoJSON record that
+    contains none of them is skipped unread (unless --connect needs every street)."""
     if os.path.isdir(source):
         seen = set()
         for path in sorted(glob.glob(f"{source}/*.json")):
@@ -43,6 +48,8 @@ def ways(source):
                     yield element.get("tags", {}), [(p["lon"], p["lat"]) for p in element["geometry"]]
     else:
         for record in open(source):
+            if needles and not any(n in record for n in needles):
+                continue
             feature = json.loads(record.lstrip("\x1e"))
             if feature["geometry"]["type"] == "LineString":
                 yield feature["properties"], [tuple(c[:2]) for c in feature["geometry"]["coordinates"]]
@@ -84,27 +91,30 @@ def main():
     parser.add_argument("--title", required=True)
     parser.add_argument("--speed", type=float, required=True)
     parser.add_argument("--times", type=float, required=True)
-    parser.add_argument("--name", action="append")
+    parser.add_argument("--name", action="append", default=[])
     parser.add_argument("--via", action="append", default=[])
-    parser.add_argument("--ref")
-    parser.add_argument("--also")
+    parser.add_argument("--ref", action="append", default=[])
+    parser.add_argument("--also", action="append", default=[])
     parser.add_argument("--from", dest="start", required=True)
     parser.add_argument("--to", dest="end", required=True)
     parser.add_argument("--gap", type=float, default=3000)
     parser.add_argument("--connect", action="store_true")
+    parser.add_argument("--link", type=float, default=0)
     parser.add_argument("--note", default="")
     args = parser.parse_args()
 
     def cost(tags):
         """How much a metre of this way counts, or None to leave it out."""
-        if args.name:
-            return 1 if tags.get("name") in args.name else None
-        refs = [r.strip() for r in tags.get("ref", "").split(";")]
-        return 1 if args.ref in refs else 3 if args.also and args.also in refs else None
+        refs = {r.strip() for r in tags.get("ref", "").split(";")}
+        if tags.get("name") in args.name or refs & set(args.ref):
+            return 1
+        return 3 if refs & set(args.also) else None
 
     graph = {}
     named = set()   # points on the named or ref'd ways themselves
-    for tags, line in ways(args.source):
+    also = set()    # points on the --also ways
+    needles = None if args.connect else [json.dumps(n)[1:-1] for n in args.name + args.ref + args.also]
+    for tags, line in ways(args.source, needles):
         weight = cost(tags)
         if weight is None:
             if not args.connect:
@@ -112,6 +122,8 @@ def main():
             weight = 5
         elif weight == 1:
             named.update(line)
+        else:
+            also.update(line)
         for a, b in zip(line, line[1:]):
             d = metres(a, b) * weight
             if d < graph.get(a, {}).get(b, math.inf):
@@ -129,6 +141,25 @@ def main():
             if d <= args.gap and b not in graph[a]:
                 graph[a][b] = graph[b][a] = d * 3
                 joined += 1
+
+    if args.link:
+        # A grid of about --link degrees, so each point looks only at its neighbours.
+        size = args.link / 111000
+        grid = defaultdict(list)
+        for q in also:
+            grid[(int(q[0] // size), int(q[1] // size))].append(q)
+        linked = 0
+        for q in named:
+            cx, cy = int(q[0] // size), int(q[1] // size)
+            near = [r for dx in (-1, 0, 1) for dy in (-1, 0, 1) for r in grid.get((cx + dx, cy + dy), ())]
+            if not near:
+                continue
+            r = min(near, key=lambda r: metres(q, r))
+            d = metres(q, r)
+            if d <= args.link and r not in graph[q]:
+                graph[q][r] = graph[r][q] = d * 3
+                linked += 1
+        print(f"{linked} links to the --also ways")
 
     def nearest(text):
         lat, lon = map(float, text.split(","))
