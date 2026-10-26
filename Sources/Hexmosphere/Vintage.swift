@@ -17,6 +17,9 @@ struct VintageLayer: Identifiable, Hashable {
     let credit: String
     let minZoom: Int
     let maxZoom: Int
+    /// The deepest zoom of each map scale in the layer, coarsest first (the topo maps: 11 for
+    /// 1:250,000, 13 for 1:62,500, 15 for 1:24,000); just maxZoom for a layer of one scale.
+    let levels: [Int]
     let folder: URL
 
     /// Every bundled layer, by title.
@@ -27,17 +30,22 @@ struct VintageLayer: Identifiable, Hashable {
             guard let data = try? Data(contentsOf: folder.appendingPathComponent("layer.json")),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let title = json["title"] as? String else { return nil }
+            let maxZoom = json["maxZoom"] as? Int ?? 18
             return VintageLayer(id: folder.lastPathComponent, title: title, credit: json["credit"] as? String ?? "",
-                                minZoom: json["minZoom"] as? Int ?? 0, maxZoom: json["maxZoom"] as? Int ?? 18, folder: folder)
+                                minZoom: json["minZoom"] as? Int ?? 0, maxZoom: maxZoom,
+                                levels: (json["levels"] as? [Int])?.sorted() ?? [maxZoom], folder: folder)
         }
         .sorted { $0.title < $1.title }
     }()
 }
 
-/// A vintage layer's tiles, read from the app bundle. Past the layer's deepest zoom, a
-/// tile is cut from the deepest one and enlarged, so the layer stays on screen as you zoom
-/// in; MapKit draws nothing past a tile overlay's maximum zoom, which a Retina screen
-/// passes sooner than the zoom level suggests.
+/// A vintage layer's tiles, read from the app bundle. Each map scale is drawn over the
+/// coarser ones, enlarged: the topo maps are clipped to narrower chains of hexagons the finer
+/// the scale, and cover only parts of the route at the finer scales, so the 1:250,000 map
+/// fills its wide chain, with sharper maps inside where there are any. Past the deepest zoom
+/// every scale is enlarged, so the layer stays on screen as you zoom in; MapKit draws nothing
+/// past a tile overlay's maximum zoom, which a Retina screen passes sooner than the zoom
+/// level suggests.
 final class VintageTiles: MKTileOverlay {
     let layer: VintageLayer
 
@@ -53,31 +61,41 @@ final class VintageTiles: MKTileOverlay {
     }
 
     override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
-        if path.z <= layer.maxZoom {
-            return result(read(path.z, path.x, path.y) ?? Self.empty, nil)
+        // For each scale that has begun by this zoom, coarsest first: its tile here, or past its
+        // deepest zoom the one it has there, with how many zooms up that is.
+        var sources: [(data: Data, up: Int)] = []
+        var start = layer.minZoom
+        for deepest in layer.levels where start <= path.z {
+            let z = min(path.z, deepest), up = path.z - z
+            if let data = read(z, path.x >> up, path.y >> up) { sources.append((data, up)) }
+            start = deepest + 1
         }
-        result(enlarged(path) ?? Self.empty, nil)
+        if sources.count == 1, sources[0].up == 0 { return result(sources[0].data, nil) }
+        result(sources.isEmpty ? Self.empty : stacked(sources, path) ?? Self.empty, nil)
     }
 
     private func read(_ z: Int, _ x: Int, _ y: Int) -> Data? {
         try? Data(contentsOf: layer.folder.appendingPathComponent("\(z)/\(x)/\(y).webp"))
     }
 
-    /// The part of the deepest tile that this deeper tile covers, scaled up to a full tile, as PNG.
-    private func enlarged(_ path: MKTileOverlayPath) -> Data? {
-        let levels = path.z - layer.maxZoom
-        let parts = 1 << levels
-        guard let data = read(layer.maxZoom, path.x >> levels, path.y >> levels),
-              let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
-        let side = CGFloat(image.width) / CGFloat(parts)
-        let column = CGFloat(path.x & (parts - 1)), row = CGFloat(path.y & (parts - 1))
-        guard let piece = image.cropping(to: CGRect(x: column * side, y: row * side, width: side, height: side)),
-              let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
-                                      bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+    /// The tiles drawn one over another, coarsest first, each cut to the part this tile covers
+    /// and scaled up to a full tile when it's from zooms up, as PNG.
+    private func stacked(_ sources: [(data: Data, up: Int)], _ path: MKTileOverlayPath) -> Data? {
+        let side = 256
+        guard let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         context.interpolationQuality = .medium
-        context.draw(piece, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        for (data, up) in sources {
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { continue }
+            let parts = 1 << up
+            let part = CGFloat(image.width) / CGFloat(parts)
+            let column = CGFloat(path.x & (parts - 1)), row = CGFloat(path.y & (parts - 1))
+            guard let piece = image.cropping(to: CGRect(x: column * part, y: row * part, width: part, height: part))
+            else { continue }
+            context.draw(piece, in: CGRect(x: 0, y: 0, width: side, height: side))
+        }
         guard let scaled = context.makeImage() else { return nil }
         let out = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 1, nil) else { return nil }
