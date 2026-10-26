@@ -21,3 +21,5 @@ vendor/
 Basemap/naturalearth-extra/
 Basemap/roads/
 Basemap/streets/
+Basemap/vintage/
+__pycache__/

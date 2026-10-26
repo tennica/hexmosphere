@@ -388,6 +388,9 @@ func basemapRenderer(for overlay: MKOverlay) -> MKOverlayRenderer? {
     if let tiles = overlay as? BlankTiles {
         return MKTileOverlayRenderer(tileOverlay: tiles)
     }
+    if let tiles = overlay as? VintageTiles {
+        return MKTileOverlayRenderer(tileOverlay: tiles)
+    }
     if let places = overlay as? Places {
         return PlacesRenderer(places)
     }

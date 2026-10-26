@@ -236,6 +236,26 @@ fix in memory, to place you again if you change the cell size; turning it off fo
 Your position is never written to disk, never in a Tiled export, and never sent anywhere. As with photos, a fix less precise than the cell is wide places you in no hexagon,
 so the smallest size waits for a good fix. **Demo Drive** (the car) runs Where I Am along a route instead of your location, for trying it anywhere: Route 66 from Chicago to Santa Monica at 1,000× real time, Highway 1 from San Francisco to Santa Monica at 200×, Trail Ridge Road at 20×, Sunset Boulevard at 15×, Pikes Peak Highway at 10×, Bay to Breakers at 20×, the Powell–Hyde cable car and Lombard Street's crooked block at 5×, or a loop round San Francisco sketched by hand. The map follows the drive. The routes are real roads from the fetched OpenStreetMap streets, made by `scripts/demo-route.py` into `Basemap/routes`. The older iPad build (`ios/`) doesn't have it.
 
+## Vintage layers
+
+**Vintage** (the clock, shown when the app has any bundled) lays old imagery along a Demo Drive route over the land, under the roads, place names and hexagons, one layer at a time:
+
+- **1970s satellite**: Landsat 1's multispectral scanner, mostly summer 1972 and 1973 (55 scenes along Route 66, three from 1974–75), in the false colour Landsat pictures were printed in then: near infrared, red and green shown as red, green and blue, so crops and woods are red. Whole scenes, each about 185 km wide, so the drive crosses a landscape rather than a strip. Zooms 5 to 11 (a pixel is about 60 m); closer in, the app enlarges the deepest tiles itself.
+- **1950s maps**: USGS topographic maps from the Historical Topographic Map Collection, the edition nearest 1955 for each sheet between 1930 and 1970, clipped to a chain of hexagons along the route: 1:250,000 maps in 17 km cells for zooms 8 to 11, 1:62,500 in 6 km cells for 12 and 13, 1:24,000 in 2.4 km cells for 14 and 15.
+
+Both are US government work, so public domain, and come from public servers that need no account (Landsat Collection 1 on Google's public bucket; the topo maps on the USGS's own). Each layer's credit joins the base map's while it's shown. Like the streets, the tiles aren't in the repository; making them needs GDAL (`brew install gdal`, with its Python bindings and numpy):
+
+```bash
+V=~/Library/Caches/hexmosphere/vintage
+scripts/vintage-fetch.py landsat Basemap/routes/route-66.json $V      # 55 scenes, 1.3 GB
+scripts/vintage-landsat.py $V/landsat1/scenes $V/landsat1/work $V/tiles/landsat1-route66
+scripts/vintage-fetch.py topo Basemap/routes/route-66.json $V         # 543 sheets
+scripts/vintage-topo.py $V/topo Basemap/routes/route-66.json $V/topo/work $V/tiles/topo-route66
+mkdir -p Basemap/vintage && cp -cR $V/tiles/landsat1-route66 $V/tiles/topo-route66 Basemap/vintage/
+```
+
+Downloads that are already there are skipped, and so are topo sheets already cropped, so a stopped run picks up where it left off. Landsat 1's scanner wore through the mission, and scenes whose rows differ from each other far more than their columns do are striped; `vintage-fetch.py` passes over those for the next best scene in the same orbit slot. `tools/hexchain.c` makes the chains of hexagons with the vendored H3. The Landsat tiles are about 53 MB bundled. Each tiles folder holds a `layer.json` naming the layer, its credit and its zooms; `Basemap/vintage` is gitignored. To test, launch with `-vintage <layer> -drive route-66`.
+
 ## Layout
 
 - `Sources/Hexmosphere`: the app, shared by Mac, iPad and iPhone (SwiftUI; on an iPhone the toolbar packs into icons):
@@ -245,6 +265,7 @@ so the smallest size waits for a good fix. **Demo Drive** (the car) runs Where I
   - `HexMapView.swift`: MapKit, with one multipolygon per shade level and region
   - `HereTracker.swift`: Where I Am, Core Location turned into the hexagon you're in
   - `Basemap.swift`, `Roads.swift`, `Streets.swift`: the offline base map, roads and streets
+  - `Vintage.swift`: the vintage layers' tiles, read from the app
   - `Thumbnails.swift`: photo previews for a selected hexagon, and one photo larger
   - `TiledExport.swift`, `TiledLayout.swift`: the Tiled export and its north-up hex layout
 - `Packages/h3o-ffi`: a small Rust crate exposing four h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
@@ -254,7 +275,8 @@ so the smallest size waits for a good fix. **Demo Drive** (the car) runs Where I
   - `osm/`: OpenStreetMap places, ODbL, with its own `LICENSE.md`
   - `h3/`: the land as compacted H3 cells
   - `naturalearth-extra/`, `roads/`, `streets/`: fetched locally, gitignored (streets are OpenStreetMap data, ODbL)
-- `scripts/fetch-basemap.sh`: fetches all of the base map data (`scripts/write-streets.py` writes the streets); `scripts/demo-route.py` makes a Demo Drive route from them; `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells
+  - `vintage/`: the vintage layers' tiles, made locally, gitignored (public domain)
+- `scripts/fetch-basemap.sh`: fetches all of the base map data (`scripts/write-streets.py` writes the streets); `scripts/demo-route.py` makes a Demo Drive route from them; `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells; `scripts/vintage-fetch.py`, `vintage-landsat.py` and `vintage-topo.py` with `tools/hexchain.c` make the vintage layers
 - `tools/make-icon.swift`: draws the app icon (a cell and its six neighbours in rainbow colours, inside a circle) into `Sources/Hexmosphere/Assets.xcassets`; the command is at the top of the file
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
 - `docs/inform.md`: hexagons as Inform 7 rooms, H3 sizes as regions, neighbours as compass exits (rooms and exits built in inform-federation)

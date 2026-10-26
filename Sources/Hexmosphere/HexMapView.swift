@@ -28,6 +28,8 @@ struct HexMapView: PlatformViewRepresentable {
     var hereTrip = 0
     /// Keep the hexagon you're in on screen (during a demo drive).
     var follow = false
+    /// The vintage layer drawn over the land, if one is chosen.
+    var vintage: VintageLayer? = nil
 
     static let levels = 6
 
@@ -73,6 +75,7 @@ struct HexMapView: PlatformViewRepresentable {
         coordinator.size = size
         coordinator.onSelect = onSelect
         showHere(map, coordinator)
+        showVintage(map, coordinator)
         // SwiftUI calls this for any change in the window; rebuild the cells
         // only when they changed, or redrawing them can feed back into here.
         guard coordinator.drawnID != binned.id else { return }
@@ -124,6 +127,27 @@ struct HexMapView: PlatformViewRepresentable {
                 map?.renderer(for: overlay)?.setNeedsDisplay()
             }
         }
+    }
+
+    /// Puts the chosen vintage layer over the land and under the roads, place names and
+    /// hexagons, replacing the last one only when the choice changes.
+    private func showVintage(_ map: MKMapView, _ coordinator: Coordinator) {
+        guard coordinator.vintageOverlay?.layer != vintage else { return }
+        if let old = coordinator.vintageOverlay {
+            map.removeOverlay(old)
+            coordinator.vintageOverlay = nil
+        }
+        guard let vintage else { return }
+        let overlay = VintageTiles(vintage)
+        // The first road layer in the base map, else the place names, else on top.
+        if let roads = coordinator.baseOverlays.first(where: { $0 is Roads || $0 is StreetTiles }) {
+            map.insertOverlay(overlay, below: roads)
+        } else if let places = coordinator.places {
+            map.insertOverlay(overlay, below: places)
+        } else {
+            map.addOverlay(overlay, level: .aboveLabels)
+        }
+        coordinator.vintageOverlay = overlay
     }
 
     /// Outlines the hexagon you're in, replacing the last one only when it changes.
@@ -190,6 +214,13 @@ struct HexMapView: PlatformViewRepresentable {
                 coordinator.baseOverlays.append(places)
                 coordinator.places = places
             }
+            // A vintage layer chosen before the base map loaded went in on top; it belongs
+            // over the land and under the roads.
+            if let vintage = coordinator.vintageOverlay,
+               let roads = coordinator.baseOverlays.first(where: { $0 is Roads || $0 is StreetTiles }) {
+                map.removeOverlay(vintage)
+                map.insertOverlay(vintage, below: roads)
+            }
             // The map has usually drawn its first tiles by now, and MapKit
             // doesn't add new overlays to tiles already on screen until the
             // map moves, so ask every base layer to draw (as for the cells).
@@ -226,6 +257,7 @@ struct HexMapView: PlatformViewRepresentable {
         var hereCell: CellID?
         var hereBackend: H3Backend?
         var hereTrip = 0
+        var vintageOverlay: VintageTiles?
         var hereOverlay: HereCell?
 
         let visible: VisibleArea

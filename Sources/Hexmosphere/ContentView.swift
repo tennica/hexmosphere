@@ -25,6 +25,8 @@ struct ContentView: View {
     @State private var exportNote: String?
     /// The hexagon you're in, when Where I Am is on. Never stored or exported.
     @State private var here = HereTracker()
+    /// The vintage layer shown over the land, if any. Not remembered between launches.
+    @State private var vintage: VintageLayer?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,7 +46,7 @@ struct ContentView: View {
 
             ZStack(alignment: .bottomLeading) {
                 HexMapView(binned: binned, size: size, onSelect: { selected = $0 }, visible: visible,
-                           here: here.cell, hereTrip: here.trip, follow: here.driving)
+                           here: here.cell, hereTrip: here.trip, follow: here.driving, vintage: vintage)
                 if let selected {
                     CellCard(cell: selected).padding(12)
                 }
@@ -59,7 +61,7 @@ struct ContentView: View {
             // and timings while building up places.
             VStack(alignment: .leading, spacing: 8) {
                 // The base map's credit on a line of its own (ODbL asks for it).
-                Text(basemapCredit)
+                Text(vintage.map { "\(basemapCredit) · \($0.credit)" } ?? basemapCredit)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(summary(binned))
@@ -100,6 +102,16 @@ struct ContentView: View {
         .onChange(of: size) { selected = nil; rebin(); here.use(size: size, backend: backend) }
         .onChange(of: backend) { selected = nil; rebin(); here.use(size: size, backend: backend) }
         .onChange(of: samples.count) { rebin() }
+        // For testing: launching with -vintage <layer id> starts with that layer on, and
+        // -drive <route id> (e.g. route-66) starts that demo drive.
+        .task {
+            if let id = UserDefaults.standard.string(forKey: "vintage") {
+                vintage = VintageLayer.all.first { $0.id == id }
+            }
+            if let id = UserDefaults.standard.string(forKey: "drive"), let route = DemoRoute.all.first(where: { $0.id == id }) {
+                here.drive(route, size: size, backend: backend)
+            }
+        }
     }
 
     @ViewBuilder private var toolbarControls: some View {
@@ -111,6 +123,7 @@ struct ContentView: View {
         Divider().frame(height: 20)
         hereButton
         driveButton
+        vintageMenu
     }
 
     private func clear() {
@@ -155,6 +168,7 @@ struct ContentView: View {
             backendPicker.pickerStyle(.segmented).fixedSize()
             hereButton.labelStyle(.iconOnly)
             driveButton.labelStyle(.iconOnly)
+            vintageMenu.labelStyle(.iconOnly)
             exportButton.labelStyle(.iconOnly)
         }
         .frame(maxWidth: .infinity)
@@ -166,6 +180,24 @@ struct ContentView: View {
         }
         .toggleStyle(.button)
         .help("Outline the hexagon you're in. Asks for your location while the app is in use. Your position is never saved, exported or sent.")
+    }
+
+    /// Old maps or early satellite imagery over the land, when the app has any bundled.
+    @ViewBuilder private var vintageMenu: some View {
+        if !VintageLayer.all.isEmpty {
+            Menu {
+                Picker("Vintage", selection: $vintage) {
+                    Text("None").tag(VintageLayer?.none)
+                    ForEach(VintageLayer.all) { layer in
+                        Text(layer.title).tag(VintageLayer?.some(layer))
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label("Vintage", systemImage: vintage == nil ? "clock.arrow.circlepath" : "clock.fill")
+            }
+            .help("Show old maps or early satellite imagery along a route, under the hexagons.")
+        }
     }
 
     /// Where I Am fed by a demo drive instead of your location.
