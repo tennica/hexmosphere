@@ -3,15 +3,21 @@
 """Make a Demo Drive route from the streets fetched for the base map.
 
     demo-route.py <overpass-folder | osmium.geojsonseq> <out.json> --title T --speed M/S --times N
-                  (--name NAME | --ref REF [--also REF]) --from LAT,LON --to LAT,LON [--note TEXT]
+                  (--name NAME… | --ref REF [--also REF]) --from LAT,LON [--via LAT,LON…] --to LAT,LON
+                  [--connect] [--gap METRES] [--note TEXT]
 
-Takes the OpenStreetMap ways whose name is NAME, or whose ref list includes REF (e.g.
-"CA 1" also matches "US 101;CA 1"), joins them into a graph at shared points, and keeps
-the shortest path between the points nearest --from and --to. Ways with the --also ref
+Takes the OpenStreetMap ways named any of the NAMEs (repeat --name for a route that turns
+from street to street), or whose ref list includes REF (e.g. "CA 1" also matches
+"US 101;CA 1"), joins them into a graph at shared points, and keeps the shortest path from
+the point nearest --from, through the points nearest each --via in turn, to --to. Ways with the --also ref
 count three times their length, so the path takes them only where the main ref has no
 road of its own (Highway 1 shares US 101 between Ventura and Gaviota). Where the ways don't join
-up (a stretch tagged only with another ref), dead ends within GAP of each other are joined
-in a straight line. The path is simplified to about 5 m and written as JSON for the app:
+up (a stretch tagged only with another ref), dead ends within --gap of each other (3 km
+unless given; keep it small in a city, where dead ends abound) are joined by a straight
+line counted at three times its length. With --connect, every other street is in the graph
+too at five times its length, so a route through a city keeps to its named streets and
+takes another only for a short link between them. --from, --via and --to snap to the
+named or ref'd ways, never to a connecting street. The path is simplified to about 5 m and written as JSON for the app:
 {"title", "speed" (metres a second in real life), "times" (how much faster the demo runs),
 "note", "points": [[lon, lat], …]}.
 """
@@ -23,7 +29,6 @@ import json
 import math
 import os
 
-GAP = 3000  # metres
 TOLERANCE = 0.00005  # degrees, about 5 m
 
 
@@ -79,68 +84,81 @@ def main():
     parser.add_argument("--title", required=True)
     parser.add_argument("--speed", type=float, required=True)
     parser.add_argument("--times", type=float, required=True)
-    parser.add_argument("--name")
+    parser.add_argument("--name", action="append")
+    parser.add_argument("--via", action="append", default=[])
     parser.add_argument("--ref")
     parser.add_argument("--also")
     parser.add_argument("--from", dest="start", required=True)
     parser.add_argument("--to", dest="end", required=True)
+    parser.add_argument("--gap", type=float, default=3000)
+    parser.add_argument("--connect", action="store_true")
     parser.add_argument("--note", default="")
     args = parser.parse_args()
 
     def cost(tags):
         """How much a metre of this way counts, or None to leave it out."""
         if args.name:
-            return 1 if tags.get("name") == args.name else None
+            return 1 if tags.get("name") in args.name else None
         refs = [r.strip() for r in tags.get("ref", "").split(";")]
         return 1 if args.ref in refs else 3 if args.also and args.also in refs else None
 
     graph = {}
+    named = set()   # points on the named or ref'd ways themselves
     for tags, line in ways(args.source):
         weight = cost(tags)
         if weight is None:
-            continue
+            if not args.connect:
+                continue
+            weight = 5
+        elif weight == 1:
+            named.update(line)
         for a, b in zip(line, line[1:]):
             d = metres(a, b) * weight
-            graph.setdefault(a, {})[b] = d
-            graph.setdefault(b, {})[a] = d
-    if not graph:
+            if d < graph.get(a, {}).get(b, math.inf):
+                graph.setdefault(a, {})[b] = d
+                graph.setdefault(b, {})[a] = d
+    if not named:
         raise SystemExit("no ways matched")
 
     # Join dead ends that nearly meet, so a stretch tagged differently doesn't break the route.
-    ends = [p for p, links in graph.items() if len(links) == 1]
+    ends = [p for p, links in graph.items() if len(links) == 1 and p in named]
     joined = 0
     for i, a in enumerate(ends):
         for b in ends[i + 1:]:
             d = metres(a, b)
-            if d <= GAP and b not in graph[a]:
-                graph[a][b] = graph[b][a] = d
+            if d <= args.gap and b not in graph[a]:
+                graph[a][b] = graph[b][a] = d * 3
                 joined += 1
 
     def nearest(text):
         lat, lon = map(float, text.split(","))
-        return min(graph, key=lambda p: metres(p, (lon, lat)))
+        return min(named, key=lambda p: metres(p, (lon, lat)))
 
-    start, end = nearest(args.start), nearest(args.end)
-    distance, previous = {start: 0.0}, {}
-    queue = [(0.0, start)]
-    while queue:
-        d, here = heapq.heappop(queue)
-        if here == end:
-            break
-        if d > distance[here]:
-            continue
-        for there, step in graph[here].items():
-            if d + step < distance.get(there, math.inf):
-                distance[there] = d + step
-                previous[there] = here
-                heapq.heappush(queue, (d + step, there))
-    if end not in distance:
-        raise SystemExit("no path between the two points")
+    def shortest(start, end):
+        distance, previous = {start: 0.0}, {}
+        queue = [(0.0, start)]
+        while queue:
+            d, here = heapq.heappop(queue)
+            if here == end:
+                break
+            if d > distance[here]:
+                continue
+            for there, step in graph[here].items():
+                if d + step < distance.get(there, math.inf):
+                    distance[there] = d + step
+                    previous[there] = here
+                    heapq.heappush(queue, (d + step, there))
+        if end not in distance:
+            raise SystemExit(f"no path from {start[1]:.4f},{start[0]:.4f} to {end[1]:.4f},{end[0]:.4f}")
+        leg = [end]
+        while leg[-1] != start:
+            leg.append(previous[leg[-1]])
+        return leg[::-1]
 
-    path = [end]
-    while path[-1] != start:
-        path.append(previous[path[-1]])
-    path.reverse()
+    stops = [nearest(p) for p in [args.start, *args.via, args.end]]
+    path = [stops[0]]
+    for a, b in zip(stops, stops[1:]):
+        path += shortest(a, b)[1:]
     points = simplify(path, TOLERANCE)
     json.dump({"title": args.title, "speed": args.speed, "times": args.times, "note": args.note,
                "points": [[round(x, 6), round(y, 6)] for x, y in points]},

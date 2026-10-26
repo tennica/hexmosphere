@@ -234,7 +234,7 @@ the view to you while the outline follows. It asks for your location only
 when you turn it on, and only while the app is in use. While it's on, the app holds the last
 fix in memory, to place you again if you change the cell size; turning it off forgets it.
 Your position is never written to disk, never in a Tiled export, and never sent anywhere. As with photos, a fix less precise than the cell is wide places you in no hexagon,
-so the smallest size waits for a good fix. **Demo Drive** (the car) runs Where I Am along a route instead of your location, for trying it anywhere: Pikes Peak Highway at 10× real time, Highway 1 from San Francisco to Santa Monica at 200×, or a loop round San Francisco sketched by hand. The map follows the drive. The routes are real roads from the fetched OpenStreetMap streets, made by `scripts/demo-route.py` into `Basemap/routes`. The older iPad build (`ios/`) doesn't have it.
+so the smallest size waits for a good fix. **Demo Drive** (the car) runs Where I Am along a route instead of your location, for trying it anywhere: Highway 1 from San Francisco to Santa Monica at 200× real time, Trail Ridge Road at 20×, Sunset Boulevard at 15×, Pikes Peak Highway at 10×, Bay to Breakers at 20×, the Powell–Hyde cable car and Lombard Street's crooked block at 5×, or a loop round San Francisco sketched by hand. The map follows the drive. The routes are real roads from the fetched OpenStreetMap streets, made by `scripts/demo-route.py` into `Basemap/routes`. The older iPad build (`ios/`) doesn't have it.
 
 ## Layout
 
