@@ -2,8 +2,9 @@
 # Fetch data for Hexmosphere's offline base map.
 #
 #   scripts/fetch-basemap.sh
-#       Re-download the small committed set: a few Natural Earth 1:50m layers,
-#       the 1:10m world cities, and OpenStreetMap places for Colorado.
+#       Re-download the small committed set of Natural Earth layers: a few at 1:50m
+#       and the 1:10m world cities. The committed OpenStreetMap places for the United
+#       States come from the Geofabrik extract: extract us north-america/us.
 #
 #   scripts/fetch-basemap.sh naturalearth <110m|50m|10m>
 #       Cache every Natural Earth GeoJSON layer at that scale (about 19 MB,
@@ -258,8 +259,7 @@ case "${1:-}" in
       curl -fsSL -A "$UA" "$NE_RAW/$layer.geojson" -o "$NE/$layer.geojson"
     done
     slim_places "$NE/ne_10m_populated_places_simple.geojson"
-    fetch_places colorado 36.99 -109.06 41.01 -102.04
-    du -sh "$NE" "$OSM"
+    du -sh "$NE"
     ;;
   naturalearth) fetch_scale "${2:?scale: 110m, 50m or 10m}" ;;
   places) shift; fetch_places "$@" ;;

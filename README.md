@@ -119,7 +119,7 @@ Earlier versions could also read individual photos chosen with the Photos picker
 The map is entirely offline. It covers Apple's map completely, roads and labels included, and draws a bundled base map (about 5 MB, plus roads and streets you fetch) on a plain background:
 
 - **Natural Earth** (public domain): coastlines, country borders, state and province lines, lakes, and about 7,300 world cities
-- **OpenStreetMap place names** (ODbL, © OpenStreetMap contributors): cities, towns, suburbs and villages for chosen regions. Colorado is included. Smaller places are labelled as you zoom in.
+- **OpenStreetMap place names** (ODbL, © OpenStreetMap contributors): cities, towns, suburbs and villages for chosen regions. The United States is included. Smaller places are labelled as you zoom in.
 
 There's no switch to Apple's map: for street detail, fetch a region's OpenStreetMap streets (below). Earlier versions had an Apple map toggle, but it fetched tiles from Apple for whatever area was on screen, so Apple could infer which places you were looking at. With the offline map, a Mac check found no tile requests after launch, but MapKit may still contact Apple, for example at startup.
 
@@ -160,14 +160,14 @@ Other cached layers, such as country polygons, graticules and region labels, are
 
 ### More places
 
-To add OpenStreetMap places for another region (one Overpass API query, with retries if the public server is busy):
+The United States' places come with its streets from one Geofabrik extract (`scripts/fetch-basemap.sh extract us north-america/us`, a 12 GB download; see [Streets](#streets)). To add OpenStreetMap places for another region (one Overpass API query, with retries if the public server is busy):
 
 ```bash
 scripts/fetch-basemap.sh places <name> <south> <west> <north> <east>
 # e.g. scripts/fetch-basemap.sh places newmexico 31.3 -109.1 37.0 -103.0
 ```
 
-Running the script with no arguments re-downloads the committed set: the Natural Earth layers above and the Colorado places.
+Running the script with no arguments re-downloads the committed Natural Earth layers above.
 
 ### Roads
 
@@ -195,7 +195,7 @@ scripts/fetch-basemap.sh extract california north-america/us/california
 # 1,247,338 streets, 12.4 million points: a 1.3 GB download, 59 MB bundled
 ```
 
-Either way the result is `Basemap/streets/streets-<name>.tiles` (gitignored), cut into 1° squares at three levels: a simplified overview of the main roads, the main streets, and residential streets (format in `scripts/write-streets.py`). The app reads only the files' indexes at launch, then each square the first time a tile needs it, keeping a few million points in memory and letting go of the least recently drawn; so memory stays about the same however many regions are bundled. With California and Colorado on the iPad simulator, the indexes load in under 30 ms and the slowest tile draws in about 50 ms. Each street class appears from a zoom level that suits it. Map zoom levels aren't H3 resolutions: zoom 14, when residential streets appear, shows about 8 km across an iPad at Denver's latitude, where a 2.4 km (resolution 7) hexagon is about 300 points wide. Motorways appear from zoom 5, primary and secondary roads from 8–9, tertiary from 11. Inside a region with streets, Natural Earth's coarse roads give way to them from zoom 10.
+Either way the result is `Basemap/streets/streets-<name>.tiles` (gitignored), cut into 1° squares at three levels: a simplified overview of the main roads, the main streets, and residential streets (format in `scripts/write-streets.py`). The app reads only the files' indexes at launch, then each square the first time a tile needs it, keeping a few million points in memory and letting go of the least recently drawn; so memory stays about the same however many regions are bundled. With California and Colorado on the iPad simulator, the indexes load in under 30 ms and the slowest tile draws in about 50 ms (on an iPhone 11, 116 ms and 122 ms). With the whole United States (`scripts/fetch-basemap.sh extract us north-america/us`: a 12 GB download, 14.3 million streets, an 814 MB file), the index loads in 17 ms, memory stays under 200 MB, and the slowest tile, a wide view of the eastern states, takes about 160 ms on the simulator; the app is then about 850 MB. Each street class appears from a zoom level that suits it. Map zoom levels aren't H3 resolutions: zoom 14, when residential streets appear, shows about 8 km across an iPad at Denver's latitude, where a 2.4 km (resolution 7) hexagon is about 300 points wide. Motorways appear from zoom 5, primary and secondary roads from 8–9, tertiary from 11. Inside a region with streets, Natural Earth's coarse roads give way to them from zoom 10.
 
 ## Exporting to Tiled
 
