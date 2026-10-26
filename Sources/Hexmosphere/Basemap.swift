@@ -275,16 +275,17 @@ struct Basemap {
         let worldRoads = FileManager.default.fileExists(atPath: roadsURL.path) ? Roads.load(roadsURL, side: 16) : []
         let streetFiles = ((try? FileManager.default.contentsOfDirectory(
             at: root.appendingPathComponent("streets"), includingPropertiesForKeys: nil)) ?? [])
-            .filter { $0.lastPathComponent.hasPrefix("streets-") && $0.pathExtension == "bin" }
-        var streets: [Roads] = []
-        var covered: [MKMapRect] = []
+            .filter { $0.lastPathComponent.hasPrefix("streets-") && $0.pathExtension == "tiles" }
+        var streets: [StreetTiles] = []
         for file in streetFiles {
-            // About 1.4° squares, so a tile looks at only a few thousand pieces.
-            let region = Roads.load(file, side: 256)
-            streets += region
-            covered.append(region.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) })
+            let clock = ContinuousClock()
+            var region: StreetTiles?
+            let took = clock.measure { region = StreetTiles(file) }
+            guard let region else { continue }
+            RoadStats.shared.loaded(roads: region.streets, points: region.points, took: took)
+            streets.append(region)
         }
-        for overlay in worldRoads { overlay.hiddenWithin = covered }
+        for overlay in worldRoads { overlay.hiddenBy = streets }
         let roads: [MKOverlay] = worldRoads + streets
         for (name, style) in layerStyles {
             // Roads go above water and rivers, below borders and other lines.
@@ -392,6 +393,9 @@ func basemapRenderer(for overlay: MKOverlay) -> MKOverlayRenderer? {
     }
     if let roads = overlay as? Roads {
         return RoadsRenderer(roads)
+    }
+    if let streets = overlay as? StreetTiles {
+        return StreetTilesRenderer(streets)
     }
     if let lines = overlay as? StyledLines {
         let renderer = MKMultiPolylineRenderer(multiPolyline: lines)

@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Roads and streets: Natural Earth's 1:10m roads from Basemap/roads/roads.bin
-// (scripts/fetch-basemap.sh roads), and OpenStreetMap streets for chosen regions
-// from Basemap/streets/streets-<name>.bin (fetch-basemap.sh streets), in the same
-// format. Each road carries the zoom level to show it from, and a tile draws
-// only the roads worth seeing at its zoom. Where detailed streets exist, the
-// coarse Natural Earth roads give way to them once zoomed in. Load and draw
-// times are kept in RoadStats for the summary line.
+// Roads: Natural Earth's 1:10m roads from Basemap/roads/roads.bin (scripts/fetch-basemap.sh
+// roads), loaded whole. OpenStreetMap streets come in chunks instead (Streets.swift) but are
+// drawn the same way. Each road carries the zoom level to show it from, and a tile draws
+// only the roads worth seeing at its zoom. Where detailed streets exist, the coarse Natural
+// Earth roads give way to them once zoomed in. Load and draw times are kept in RoadStats for
+// the summary line.
 
 import Foundation
 import MapKit
@@ -31,29 +30,75 @@ final class Roads: NSObject, MKOverlay {
     /// Every piece's points, back to back.
     let points: [MKMapPoint]
     let boundingMapRect: MKMapRect
-    /// Areas with detailed streets, where these roads aren't drawn from
+    /// Regions with detailed streets, where these roads aren't drawn from
     /// `hiddenFromZoom` in (set on Natural Earth's roads only).
-    var hiddenWithin: [MKMapRect] = []
+    var hiddenBy: [StreetTiles] = []
     static let hiddenFromZoom = 10.0
 
+    init(roads: [Road], points: [MKMapPoint]) {
+        self.roads = roads
+        self.points = points
+        boundingMapRect = roads.reduce(MKMapRect.null) { $0.union($1.rect) }
+    }
+
     /// Copies the given pieces' points out of `source` into this overlay's own array.
-    init(_ pieces: [Road], from source: [MKMapPoint]) {
+    convenience init(_ pieces: [Road], from source: [MKMapPoint]) {
         var points: [MKMapPoint] = []
         points.reserveCapacity(pieces.reduce(0) { $0 + $1.points.count })
-        roads = pieces.map { piece in
+        let roads = pieces.map { piece in
             let start = points.count
             points.append(contentsOf: source[piece.points])
             return Road(kind: piece.kind, minZoom: piece.minZoom, rect: piece.rect, points: start..<points.count)
         }
-        self.points = points
-        boundingMapRect = roads.reduce(MKMapRect.null) { $0.union($1.rect) }
+        self.init(roads: roads, points: points)
+    }
+
+    /// Cuts the line `all[first...]` into pieces of at most `Road.pieceLength` points.
+    /// Neighbouring pieces share an end point, so the line stays joined.
+    static func cut(_ all: [MKMapPoint], from first: Int, kind: Road.Kind, minZoom: Double, into pieces: inout [Road]) {
+        var start = first
+        while start < all.count - 1 {
+            let end = min(start + Road.pieceLength, all.count)
+            var low = all[start], high = all[start]
+            for point in all[start + 1..<end] {
+                low = MKMapPoint(x: min(low.x, point.x), y: min(low.y, point.y))
+                high = MKMapPoint(x: max(high.x, point.x), y: max(high.y, point.y))
+            }
+            // At least one map point across, so straight north–south or east–west
+            // pieces still count as touching a tile.
+            let rect = MKMapRect(x: low.x, y: low.y, width: max(1, high.x - low.x), height: max(1, high.y - low.y))
+            pieces.append(Road(kind: kind, minZoom: minZoom, rect: rect, points: start..<end))
+            start = end - 1
+        }
+    }
+
+    /// Adds the pieces worth drawing at this zoom within `area` to `lines`, by kind, and
+    /// returns how many were added. Points closer than `step` map points to the last one
+    /// kept are skipped: zoomed out, most of a street's points fall within one pixel.
+    func addLines(to lines: inout [Road.Kind: RoadLines], area: MKMapRect, zoom: Double, step: Double,
+                  point: (MKMapPoint) -> CGPoint) -> Int {
+        var drawn = 0
+        for road in roads where road.minZoom <= zoom && road.rect.intersects(area) {
+            // Appended in place: a copy of the kind's lines per piece would make this quadratic.
+            var last = points[road.points.lowerBound]
+            lines[road.kind, default: RoadLines()].points.append(point(last))
+            for index in road.points.dropFirst() {
+                let next = points[index]
+                guard index == road.points.upperBound - 1
+                        || abs(next.x - last.x) >= step || abs(next.y - last.y) >= step else { continue }
+                lines[road.kind, default: RoadLines()].points.append(point(next))
+                last = next
+            }
+            lines[road.kind, default: RoadLines()].ends.append(lines[road.kind]!.points.count)
+            drawn += 1
+        }
+        return drawn
     }
 
     var coordinate: CLLocationCoordinate2D { MKMapPoint(x: boundingMapRect.midX, y: boundingMapRect.midY).coordinate }
 
     /// Reads a roads file (format in scripts/fetch-basemap.sh) and groups the
-    /// pieces on a grid over the world, `side` squares each way: coarse for
-    /// worldwide roads, fine for a region's dense streets.
+    /// pieces on a grid over the world, `side` squares each way.
     static func load(_ url: URL, side: Int) -> [Roads] {
         let clock = ContinuousClock()
         var pieces: [Road] = []
@@ -85,19 +130,7 @@ final class Roads: NSObject, MKOverlay {
                             all.append(MKMapPoint(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)))
                         }
                         points += pointCount
-                        // Neighbouring pieces share an end point, so the line stays joined.
-                        var start = first
-                        while start < first + pointCount - 1 {
-                            let end = min(start + Road.pieceLength, first + pointCount)
-                            let piece = all[start..<end]
-                            let xs = piece.map(\.x), ys = piece.map(\.y)
-                            // At least one map point across, so straight north–south or east–west
-                            // pieces still count as touching a tile.
-                            let rect = MKMapRect(x: xs.min()!, y: ys.min()!,
-                                                 width: max(1, xs.max()! - xs.min()!), height: max(1, ys.max()! - ys.min()!))
-                            pieces.append(Road(kind: kind, minZoom: minZoom, rect: rect, points: start..<end))
-                            start = end - 1
-                        }
+                        cut(all, from: first, kind: kind, minZoom: minZoom, into: &pieces)
                     }
                     roadCount += 1
                 }
@@ -114,6 +147,12 @@ final class Roads: NSObject, MKOverlay {
         }
         return groups.values.map { Roads($0, from: all) }
     }
+}
+
+/// Pieces of road to draw, as screen points back to back with where each piece ends.
+struct RoadLines {
+    var points: [CGPoint] = []
+    var ends: [Int] = []
 }
 
 final class RoadsRenderer: MKOverlayRenderer {
@@ -134,33 +173,50 @@ final class RoadsRenderer: MKOverlayRenderer {
 
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
         let started = ContinuousClock.now
-        let zoom = log2(Double(zoomScale) * MKMapRect.world.width / 256)
-        if zoom >= Roads.hiddenFromZoom, roads.hiddenWithin.contains(where: { $0.contains(mapRect) }) { return }
-        // Widen the tile a little so lines along its edge aren't cut off.
-        let area = mapRect.insetBy(dx: -4 / Double(zoomScale), dy: -4 / Double(zoomScale))
-        var paths: [Road.Kind: CGMutablePath] = [:]
-        var drawn = 0
-        for road in roads.roads where road.minZoom <= zoom && road.rect.intersects(area) {
-            let path = paths[road.kind] ?? CGMutablePath()
-            path.move(to: point(for: roads.points[road.points.lowerBound]))
-            for index in road.points.dropFirst() {
-                path.addLine(to: point(for: roads.points[index]))
-            }
-            paths[road.kind] = path
-            drawn += 1
-        }
+        let zoom = Self.zoom(zoomScale)
+        if zoom >= Roads.hiddenFromZoom, roads.hiddenBy.contains(where: { $0.covers(mapRect) }) { return }
+        var lines: [Road.Kind: RoadLines] = [:]
+        let drawn = roads.addLines(to: &lines, area: Self.area(mapRect, zoomScale), zoom: zoom,
+                                   step: Self.step(zoomScale)) { point(for: $0) }
+        Self.stroke(lines, in: context, zoomScale: zoomScale)
+        RoadStats.shared.drew(roads: drawn, took: ContinuousClock.now - started)
+    }
+
+    /// Web map zoom level for MapKit's zoom scale.
+    static func zoom(_ zoomScale: MKZoomScale) -> Double {
+        log2(Double(zoomScale) * MKMapRect.world.width / 256)
+    }
+
+    /// Half a screen point, in map points: the closest two drawn points need be.
+    static func step(_ zoomScale: MKZoomScale) -> Double { 0.5 / Double(zoomScale) }
+
+    /// The tile, widened a little so lines along its edge aren't cut off.
+    static func area(_ mapRect: MKMapRect, _ zoomScale: MKZoomScale) -> MKMapRect {
+        mapRect.insetBy(dx: -4 / Double(zoomScale), dy: -4 / Double(zoomScale))
+    }
+
+    /// Strokes each piece on its own. CoreGraphics takes far longer over one path of many
+    /// pieces than over the same pieces one at a time: a zoomed-out tile of California's
+    /// main roads took about 7 s as one path and under 0.1 s piece by piece.
+    static func stroke(_ lines: [Road.Kind: RoadLines], in context: CGContext, zoomScale: MKZoomScale) {
         context.setLineJoin(.round)
         context.setLineCap(.round)
         // Lesser roads first, so highways draw over them.
         for kind in [Road.Kind.other, .ferry, .secondary, .major] {
-            guard let path = paths[kind], let (color, width) = Self.styles[kind] else { continue }
-            context.addPath(path)
+            guard let kept = lines[kind], let (color, width) = Self.styles[kind] else { continue }
             context.setStrokeColor(color)
             context.setLineWidth(width / zoomScale)
             context.setLineDash(phase: 0, lengths: kind == .ferry ? [3 / zoomScale, 3 / zoomScale] : [])
-            context.strokePath()
+            var start = 0
+            for end in kept.ends {
+                context.move(to: kept.points[start])
+                for index in start + 1..<end {
+                    context.addLine(to: kept.points[index])
+                }
+                context.strokePath()
+                start = end
+            }
         }
-        RoadStats.shared.drew(roads: drawn, took: ContinuousClock.now - started)
     }
 }
 

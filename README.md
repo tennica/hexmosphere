@@ -67,6 +67,7 @@ The repository carries a small base map. Roads and streets are fetched separatel
 ```bash
 scripts/fetch-basemap.sh roads                                          # world roads, 5.8 MB
 scripts/fetch-basemap.sh streets colorado 36.99 -109.06 41.01 -102.04   # a region's streets
+scripts/fetch-basemap.sh extract california north-america/us/california  # a big region's, from one download
 ```
 
 ### 5. The Mac app
@@ -184,10 +185,17 @@ For street-level detail in a region, fetch its OpenStreetMap streets (ODbL), fro
 
 ```bash
 scripts/fetch-basemap.sh streets colorado 36.99 -109.06 41.01 -102.04
-# 303,876 streets, 3.9 million points: about 400 MB cached, 33 MB bundled
+# 303,876 streets, 3.9 million points: about 400 MB cached, 18 MB bundled
 ```
 
-The script asks the Overpass API for one 1° square at a time, caching each answer in `~/Library/Caches/hexmosphere/osm`, and writes `Basemap/streets/streets-<name>.bin` (gitignored) in the roads format. Each street class appears from a zoom level that suits it. Map zoom levels aren't H3 resolutions: zoom 14, when residential streets appear, shows about 8 km across an iPad at Denver's latitude, where a 2.4 km (resolution 7) hexagon is about 300 points wide. Motorways appear from zoom 5, primary and secondary roads from 8–9, tertiary from 11. Inside a region with streets, Natural Earth's coarse roads give way to them from zoom 10.
+The script asks the Overpass API for one 1° square at a time, caching each answer in `~/Library/Caches/hexmosphere/osm`. For a big region, one Geofabrik extract filtered locally with [osmium](https://osmcode.org/osmium-tool/) (`brew install osmium-tool`) is quicker and kinder to the public servers; it brings the region's place names too:
+
+```bash
+scripts/fetch-basemap.sh extract california north-america/us/california
+# 1,247,338 streets, 12.4 million points: a 1.3 GB download, 59 MB bundled
+```
+
+Either way the result is `Basemap/streets/streets-<name>.tiles` (gitignored), cut into 1° squares at three levels: a simplified overview of the main roads, the main streets, and residential streets (format in `scripts/write-streets.py`). The app reads only the files' indexes at launch, then each square the first time a tile needs it, keeping a few million points in memory and letting go of the least recently drawn; so memory stays about the same however many regions are bundled. With California and Colorado on the iPad simulator, the indexes load in under 30 ms and the slowest tile draws in about 50 ms. Each street class appears from a zoom level that suits it. Map zoom levels aren't H3 resolutions: zoom 14, when residential streets appear, shows about 8 km across an iPad at Denver's latitude, where a 2.4 km (resolution 7) hexagon is about 300 points wide. Motorways appear from zoom 5, primary and secondary roads from 8–9, tertiary from 11. Inside a region with streets, Natural Earth's coarse roads give way to them from zoom 10.
 
 ## Exporting to Tiled
 
@@ -234,7 +242,7 @@ so the smallest size waits for a good fix. The older iPad build (`ios/`) doesn't
   - `H3Grid.swift`: H3 wrappers for both backends, cell sizes, binning
   - `HexMapView.swift`: MapKit, with one multipolygon per shade level and region
   - `HereTracker.swift`: Where I Am, Core Location turned into the hexagon you're in
-  - `Basemap.swift`, `Roads.swift`: the offline base map, roads and streets
+  - `Basemap.swift`, `Roads.swift`, `Streets.swift`: the offline base map, roads and streets
   - `Thumbnails.swift`: photo previews for a selected hexagon
   - `TiledExport.swift`, `TiledLayout.swift`: the Tiled export and its north-up hex layout
 - `Packages/h3o-ffi`: a small Rust crate exposing four h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
@@ -244,7 +252,7 @@ so the smallest size waits for a good fix. The older iPad build (`ios/`) doesn't
   - `osm/`: OpenStreetMap places, ODbL, with its own `LICENSE.md`
   - `h3/`: the land as compacted H3 cells
   - `naturalearth-extra/`, `roads/`, `streets/`: fetched locally, gitignored (streets are OpenStreetMap data, ODbL)
-- `scripts/fetch-basemap.sh`: fetches all of the base map data; `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells
+- `scripts/fetch-basemap.sh`: fetches all of the base map data (`scripts/write-streets.py` writes the streets); `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells
 - `tools/make-icon.swift`: draws the app icon (a cell and its six neighbours in rainbow colours, inside a circle) into `Sources/Hexmosphere/Assets.xcassets`; the command is at the top of the file
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
 - `docs/inform.md`: hexagons as Inform 7 rooms, H3 sizes as regions, neighbours as compass exits (rooms and exits built in inform-federation)

@@ -18,7 +18,16 @@
 #       Fetch every OpenStreetMap street in a region, from motorways down to
 #       residential streets (no service roads, tracks or paths), in 1° squares
 #       from the Overpass API, cached in ~/Library/Caches/hexmosphere/osm. Writes
-#       Basemap/streets/streets-<name>.bin (gitignored), in the roads.bin format.
+#       Basemap/streets/streets-<name>.tiles (gitignored), cut into 1° squares the
+#       app reads as it needs them (format in scripts/write-streets.py).
+#
+#   scripts/fetch-basemap.sh extract <name> <geofabrik-region>
+#       The same streets, plus place names, for a whole region from one Geofabrik
+#       extract (e.g. extract california north-america/us/california), filtered
+#       locally with osmium. Kinder to the public servers than one Overpass query
+#       per square for a big region. The extract is cached in
+#       ~/Library/Caches/hexmosphere/geofabrik; writes streets-<name>.tiles and
+#       Basemap/osm/places-<name>.geojson.
 #
 #   scripts/fetch-basemap.sh roads
 #       Cache Natural Earth's 1:10m roads (about 50 MB, 56,600 roads) and write
@@ -120,33 +129,63 @@ for lat in range(math.floor(s), math.ceil(n)):
     echo "streets $name: $s,$w" >&2
     overpass "[out:json][timeout:300];way[\"highway\"~\"^($classes)\$\"]($s,$w,$n,$e);out geom;" "$file"
   done <<< "$squares"
-  python3 -I - "$cache" "Basemap/streets/streets-$name.bin" <<'PY'
-import glob, json, struct, sys
-# Kind (as in roads.bin) and the zoom level to show each class from.
-classes = {
-    "motorway": (0, 5), "trunk": (0, 6), "motorway_link": (0, 11), "trunk_link": (0, 11),
-    "primary": (1, 8), "primary_link": (1, 12), "secondary": (1, 9), "secondary_link": (1, 12),
-    "tertiary": (2, 11), "tertiary_link": (2, 13), "unclassified": (2, 12),
-    "residential": (2, 14), "living_street": (2, 14), "pedestrian": (2, 14),
+  write_streets "$cache" "Basemap/streets/streets-$name.tiles"
 }
-ways = {}
-for path in sorted(glob.glob(f"{sys.argv[1]}/*.json")):
-    for element in json.load(open(path))["elements"]:
-        if element.get("type") == "way" and element.get("geometry"):
-            ways[element["id"]] = element   # a way crossing squares comes back in each
-points = 0
-with open(sys.argv[2], "wb") as out:
-    out.write(struct.pack("<I", len(ways)))
-    for way in ways.values():
-        kind, zoom = classes.get(way["tags"].get("highway"), (2, 14))
-        line = [(p["lon"], p["lat"]) for p in way["geometry"]]
-        out.write(struct.pack("<BBH", kind, zoom * 10, 1))
-        out.write(struct.pack("<I", len(line)))
-        out.write(struct.pack(f"<{len(line) * 2}f", *(c for point in line for c in point)))
-        points += len(line)
-print(f"streets: {len(ways)} streets, {points} points")
+
+# The street classes fetched, as an Overpass regex and as an osmium filter.
+STREET_CLASSES=motorway,trunk,primary,secondary,tertiary,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link,unclassified,residential,living_street,pedestrian
+
+# Writes a streets .tiles file (format in scripts/write-streets.py) from either a folder
+# of Overpass answers or a GeoJSON sequence of lines exported by osmium.
+write_streets() {
+  python3 -I scripts/write-streets.py "$1" "$2"
+  du -h "$2"
+}
+
+# Streets and places for a whole region from one Geofabrik extract, filtered here
+# with osmium (brew install osmium-tool): one download instead of an Overpass query
+# per 1° square. <region> is Geofabrik's path, e.g. north-america/us/california.
+fetch_extract() {
+  local name=$1 region=$2
+  command -v osmium >/dev/null || { echo "needs osmium: brew install osmium-tool" >&2; exit 1; }
+  local cache=${HEXMOSPHERE_CACHE:-$HOME/Library/Caches/hexmosphere}/geofabrik
+  local pbf=$cache/$(basename "$region")-latest.osm.pbf
+  local url=https://download.geofabrik.de/$region-latest.osm.pbf
+  mkdir -p "$cache" Basemap/streets "$OSM"
+  if [ ! -s "$pbf" ]; then
+    curl -fsSL -A "$UA" "$url.md5" -o "$pbf.md5"
+    curl -fSL -A "$UA" "$url" -o "$pbf.part"
+    [ "$(md5 -q "$pbf.part")" = "$(cut -d' ' -f1 "$pbf.md5")" ] || { echo "checksum mismatch: $url" >&2; exit 1; }
+    mv "$pbf.part" "$pbf"
+  fi
+  osmium tags-filter --overwrite "$pbf" "w/highway=$STREET_CLASSES" -o "$cache/streets-$name.osm.pbf"
+  osmium export --overwrite -f geojsonseq --geometry-types=linestring \
+    "$cache/streets-$name.osm.pbf" -o "$cache/streets-$name.geojsonseq"
+  write_streets "$cache/streets-$name.geojsonseq" "Basemap/streets/streets-$name.tiles"
+  osmium tags-filter --overwrite "$pbf" "n/place=city,town,suburb,village" -o "$cache/places-$name.osm.pbf"
+  osmium export --overwrite -f geojsonseq --geometry-types=point \
+    "$cache/places-$name.osm.pbf" -o "$cache/places-$name.geojsonseq"
+  python3 -I - "$cache/places-$name.geojsonseq" "$OSM/places-$name.geojson" <<'PY'
+import json, sys
+features = []
+for record in open(sys.argv[1]):
+    feature = json.loads(record.lstrip("\x1e"))
+    tags = feature["properties"]
+    if not tags.get("name"):
+        continue
+    try:
+        population = int(str(tags.get("population", "0")).replace(",", "").split(";")[0] or 0)
+    except ValueError:
+        population = 0
+    lon, lat = feature["geometry"]["coordinates"]
+    features.append({
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [round(lon, 5), round(lat, 5)]},
+        "properties": {"name": tags["name"], "place": tags["place"], "population": population},
+    })
+json.dump({"type": "FeatureCollection", "features": features}, open(sys.argv[2], "w"), separators=(",", ":"))
+print(f"places-{sys.argv[2].rsplit('places-', 1)[1].removesuffix('.geojson')}: {len(features)} places")
 PY
-  du -h "Basemap/streets/streets-$name.bin"
 }
 
 fetch_places() {
@@ -226,5 +265,6 @@ case "${1:-}" in
   places) shift; fetch_places "$@" ;;
   roads) fetch_roads ;;
   streets) shift; fetch_streets "$@" ;;
-  *) echo "usage: $0 [naturalearth <110m|50m|10m> | places|streets <name> <south> <west> <north> <east> | roads]" >&2; exit 2 ;;
+  extract) shift; fetch_extract "${1:?name}" "${2:?Geofabrik region, e.g. north-america/us/california}" ;;
+  *) echo "usage: $0 [naturalearth <110m|50m|10m> | places|streets <name> <south> <west> <north> <east> | extract <name> <geofabrik-region> | roads]" >&2; exit 2 ;;
 esac
