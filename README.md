@@ -234,7 +234,7 @@ the view to you while the outline follows. It asks for your location only
 when you turn it on, and only while the app is in use. While it's on, the app holds the last
 fix in memory, to place you again if you change the cell size; turning it off forgets it.
 Your position is never written to disk, never in a Tiled export, and never sent anywhere. As with photos, a fix less precise than the cell is wide places you in no hexagon,
-so the smallest size waits for a good fix. In development and simulator builds, **Demo Drive** (the car) runs Where I Am on a simulated loop round San Francisco at city speed instead of your location, for trying it anywhere. The older iPad build (`ios/`) doesn't have it.
+so the smallest size waits for a good fix. **Demo Drive** (the car) runs Where I Am along a route instead of your location, for trying it anywhere: Pikes Peak Highway at 10× real time, Highway 1 from San Francisco to Santa Monica at 200×, or a loop round San Francisco sketched by hand. The map follows the drive. The routes are real roads from the fetched OpenStreetMap streets, made by `scripts/demo-route.py` into `Basemap/routes`. The older iPad build (`ios/`) doesn't have it.
 
 ## Layout
 
@@ -254,7 +254,7 @@ so the smallest size waits for a good fix. In development and simulator builds, 
   - `osm/`: OpenStreetMap places, ODbL, with its own `LICENSE.md`
   - `h3/`: the land as compacted H3 cells
   - `naturalearth-extra/`, `roads/`, `streets/`: fetched locally, gitignored (streets are OpenStreetMap data, ODbL)
-- `scripts/fetch-basemap.sh`: fetches all of the base map data (`scripts/write-streets.py` writes the streets); `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells
+- `scripts/fetch-basemap.sh`: fetches all of the base map data (`scripts/write-streets.py` writes the streets); `scripts/demo-route.py` makes a Demo Drive route from them; `scripts/build-land-cells.sh` with `tools/landcells.c` builds the land cells
 - `tools/make-icon.swift`: draws the app icon (a cell and its six neighbours in rainbow colours, inside a circle) into `Sources/Hexmosphere/Assets.xcassets`; the command is at the top of the file
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
 - `docs/inform.md`: hexagons as Inform 7 rooms, H3 sizes as regions, neighbours as compass exits (rooms and exits built in inform-federation)

@@ -43,7 +43,8 @@ struct ContentView: View {
             .padding(10)
 
             ZStack(alignment: .bottomLeading) {
-                HexMapView(binned: binned, size: size, onSelect: { selected = $0 }, visible: visible, here: here.cell)
+                HexMapView(binned: binned, size: size, onSelect: { selected = $0 }, visible: visible,
+                           here: here.cell, hereTrip: here.trip, follow: here.driving)
                 if let selected {
                     CellCard(cell: selected).padding(12)
                 }
@@ -167,16 +168,26 @@ struct ContentView: View {
         .help("Outline the hexagon you're in. Asks for your location while the app is in use. Your position is never saved, exported or sent.")
     }
 
-    /// Where I Am fed by the demo drive round San Francisco instead of your location.
-    /// Only in development and simulator builds.
-    @ViewBuilder private var driveButton: some View {
-        #if DEBUG || targetEnvironment(simulator)
-        Toggle(isOn: Binding(get: { here.driving }, set: { $0 ? here.drive(size: size, backend: backend) : here.stop() })) {
+    /// Where I Am fed by a demo drive instead of your location.
+    private var driveButton: some View {
+        Menu {
+            ForEach(DemoRoute.all) { route in
+                Button { here.drive(route, size: size, backend: backend) } label: {
+                    if here.route?.id == route.id {
+                        Label(route.title, systemImage: "checkmark")
+                    } else {
+                        Text(route.title)
+                    }
+                }
+            }
+            if here.driving {
+                Divider()
+                Button("Stop Driving") { here.stop() }
+            }
+        } label: {
             Label("Demo Drive", systemImage: here.driving ? "car.fill" : "car")
         }
-        .toggleStyle(.button)
-        .help("Try Where I Am on a simulated drive round San Francisco, in place of your location.")
-        #endif
+        .help("Try Where I Am on a simulated drive along a real road, in place of your location.")
     }
 
     /// The line under the summary while Where I Am is on.
@@ -184,7 +195,10 @@ struct ContentView: View {
         if let note = here.note { return note }
         guard let cell = here.cell else { return "Finding where you are…" }
         let photos = binned.cells[cell].map { " · \($0.days.count) days and \($0.samples) photos here" } ?? " · no photos here yet"
-        if here.driving { return "Demo drive: in the outlined hexagon, \(cellName(cell))\(photos)." }
+        if let route = here.route {
+            let pace = route.times == 1 ? "real time" : "\(route.times.formatted())× real time"
+            return "Demo drive, \(route.title) at \(pace): in the outlined hexagon, \(cellName(cell))\(photos)."
+        }
         return "You're in the outlined hexagon, \(cellName(cell))\(photos). It isn't saved or exported."
     }
 

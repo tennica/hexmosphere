@@ -13,8 +13,11 @@ import Observation
     /// Why there's no hexagon to show, for the summary line.
     private(set) var note: String?
     private(set) var on = false
-    /// True while the demo drive stands in for Core Location.
-    private(set) var driving = false
+    /// The demo drive standing in for Core Location, if one is on.
+    private(set) var route: DemoRoute?
+    var driving: Bool { route != nil }
+    /// Counts each time it's turned on or a drive starts, so the map knows to go there.
+    private(set) var trip = 0
 
     @ObservationIgnored private let manager = CLLocationManager()
     @ObservationIgnored private var size = CellSize.r7
@@ -35,6 +38,7 @@ import Observation
     func start(size: CellSize, backend: H3Backend) {
         stopDriving()
         on = true
+        trip += 1
         self.size = size
         self.backend = backend
         note = "Finding where you are…"
@@ -84,24 +88,26 @@ import Observation
         note = "Can't tell where you are just now."
     }
 
-    /// Turns it on with the demo drive in place of Core Location: a loop around San
-    /// Francisco at city speed, one position a second, for trying Where I Am anywhere.
-    func drive(size: CellSize, backend: H3Backend) {
+    /// Turns it on with a demo drive in place of Core Location, for trying Where I Am
+    /// anywhere: the route at its real-life speed times its speed-up, four positions a second.
+    func drive(_ route: DemoRoute, size: CellSize, backend: H3Backend) {
         stop()
         on = true
-        driving = true
+        trip += 1
+        self.route = route
         self.size = size
         self.backend = backend
+        let tick = 0.25
         var travelled = 0.0
         let step = { [weak self] in
             guard let self else { return }
-            let location = DemoDrive.position(after: travelled)
-            travelled += DemoDrive.speed
+            let location = route.position(after: travelled)
+            travelled += route.speed * route.times * tick
             last = location
             place(location)
         }
         step()
-        let timer = Timer(timeInterval: 1, repeats: true) { _ in step() }
+        let timer = Timer(timeInterval: tick, repeats: true) { _ in step() }
         // Common modes, so the drive keeps going while the map is being panned.
         RunLoop.main.add(timer, forMode: .common)
         driveTimer = timer
@@ -110,7 +116,7 @@ import Observation
     private func stopDriving() {
         driveTimer?.invalidate()
         driveTimer = nil
-        driving = false
+        route = nil
     }
 
     /// Updates the hexagon only when it changes. As with photos, a position known less
@@ -124,34 +130,5 @@ import Observation
         note = nil
         let here = cellFor(location.coordinate, size: size, backend: backend)
         if here != cell { cell = here }
-    }
-}
-
-/// The demo drive: Fort Mason, the Marina, the Presidio's edge, Golden Gate Park, the
-/// Castro, the Mission, SoMa, the Ferry Building and back, about 23 km in straight
-/// lines between these points, so it cuts through blocks.
-enum DemoDrive {
-    static let speed = 15.0   // metres a second, about 54 km/h
-    static let route = [
-        (37.8048, -122.4271), (37.8030, -122.4370), (37.7840, -122.4470), (37.7694, -122.4862),
-        (37.7600, -122.4350), (37.7599, -122.4148), (37.7790, -122.3900), (37.7955, -122.3937),
-        (37.8080, -122.4177),
-    ].map { CLLocation(latitude: $0.0, longitude: $0.1) }
-
-    private static let legs: [Double] = route.indices.map { route[$0].distance(from: route[($0 + 1) % route.count]) }
-
-    /// Where the drive is after this many metres, round the loop as often as needed.
-    static func position(after metres: Double) -> CLLocation {
-        var left = metres.truncatingRemainder(dividingBy: legs.reduce(0, +))
-        var leg = 0
-        while left > legs[leg] {
-            left -= legs[leg]
-            leg += 1
-        }
-        let from = route[leg].coordinate, to = route[(leg + 1) % route.count].coordinate
-        let share = legs[leg] > 0 ? left / legs[leg] : 0
-        let here = CLLocationCoordinate2D(latitude: from.latitude + (to.latitude - from.latitude) * share,
-                                          longitude: from.longitude + (to.longitude - from.longitude) * share)
-        return CLLocation(coordinate: here, altitude: 0, horizontalAccuracy: 5, verticalAccuracy: -1, timestamp: .now)
     }
 }

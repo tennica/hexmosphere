@@ -24,6 +24,10 @@ struct HexMapView: PlatformViewRepresentable {
     let visible: VisibleArea
     /// The hexagon you're in, when Where I Am is on: outlined above the photos' cells.
     var here: CellID? = nil
+    /// Changes each time Where I Am is turned on or a demo drive starts: the map goes there.
+    var hereTrip = 0
+    /// Keep the hexagon you're in on screen (during a demo drive).
+    var follow = false
 
     static let levels = 6
 
@@ -124,8 +128,10 @@ struct HexMapView: PlatformViewRepresentable {
 
     /// Outlines the hexagon you're in, replacing the last one only when it changes.
     private func showHere(_ map: MKMapView, _ coordinator: Coordinator) {
-        guard coordinator.hereCell != here || coordinator.hereBackend != binned.backend else { return }
-        let found = coordinator.hereCell == nil
+        guard coordinator.hereCell != here || coordinator.hereBackend != binned.backend
+                || coordinator.hereTrip != hereTrip else { return }
+        let found = coordinator.hereCell == nil || coordinator.hereTrip != hereTrip
+        coordinator.hereTrip = hereTrip
         coordinator.hereCell = here
         coordinator.hereBackend = binned.backend
         if let old = coordinator.hereOverlay {
@@ -142,15 +148,18 @@ struct HexMapView: PlatformViewRepresentable {
             map.addOverlay(overlay, level: .aboveLabels)
         }
         coordinator.hereOverlay = overlay
-        // When you're first found, go there: a dozen hexagons across, and never wider
-        // in view than about 5 km, so the smaller sizes still open on streets. After that
-        // the map stays where you put it, and the outline moves within it.
+        // When you're first found, or a demo drive starts, go there: a dozen hexagons
+        // across, and never wider in view than about 5 km, so the smaller sizes still open
+        // on streets. After that the map stays where you put it and the outline moves
+        // within it, except that a demo drive is followed when it leaves the view.
         if found {
             let cell = overlay.boundingMapRect
             let floor = 5000 / MKMetersPerMapPointAtLatitude(overlay.coordinate.latitude)
             let side = max(cell.width * 12, floor)
             let area = MKMapRect(x: cell.midX - side / 2, y: cell.midY - side / 2, width: side, height: side)
             map.setVisibleMapRect(area, animated: true)
+        } else if follow, !map.visibleMapRect.contains(overlay.boundingMapRect) {
+            map.setCenter(overlay.coordinate, animated: true)
         }
     }
 
@@ -216,6 +225,7 @@ struct HexMapView: PlatformViewRepresentable {
         var onSelect: (CellSummary?) -> Void
         var hereCell: CellID?
         var hereBackend: H3Backend?
+        var hereTrip = 0
         var hereOverlay: HereCell?
 
         let visible: VisibleArea
