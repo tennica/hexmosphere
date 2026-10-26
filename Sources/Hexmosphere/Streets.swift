@@ -3,8 +3,9 @@
 // (scripts/fetch-basemap.sh streets or extract; format in scripts/write-streets.py). Only
 // the file's index is read at launch. Each 1° square is read when a tile first needs it
 // and kept in a cache of bounded size, so memory stays about the same however many
-// regions are bundled. A square comes at three levels: a simplified overview of the main
-// roads for wide views, the main streets from zoom 10, and residential streets from zoom 14.
+// regions are bundled. A square comes at up to four levels: the motorways and trunk roads,
+// joined and simplified, for the widest views (zoom 5 to 7); an overview of the main roads
+// (7 to 10); the main streets from zoom 10; and residential streets from zoom 14.
 
 import Foundation
 import MapKit
@@ -20,7 +21,8 @@ final class StreetTiles: NSObject, MKOverlay {
     }
 
     /// Zooms from which each level is drawn; the overview gives way to the main streets.
-    static let overviewFrom = 5.0
+    static let wideFrom = 5.0
+    static let overviewFrom = 7.0
     static let mainFrom = 10.0
     static let residentialFrom = 14.0
     /// Points held in decoded squares before the least recently drawn are let go:
@@ -37,6 +39,8 @@ final class StreetTiles: NSObject, MKOverlay {
     private let data: Data
     /// The squares with main streets, where Natural Earth's roads give way to these.
     private let mainSquares: Set<Int>
+    /// Whether the file has level 3, the motorways and trunk roads for the widest views.
+    private let hasWide: Bool
 
     private let lock = NSLock()
     /// One per square, so tiles that need the same square wait for one read of it.
@@ -82,6 +86,7 @@ final class StreetTiles: NSObject, MKOverlay {
         self.points = points
         boundingMapRect = chunks.reduce(MKMapRect.null) { $0.union($1.rect) }
         mainSquares = Set(chunks.filter { $0.level == 1 }.map { Self.square($0.south, $0.west) })
+        hasWide = chunks.contains { $0.level == 3 }
     }
 
     var coordinate: CLLocationCoordinate2D { MKMapPoint(x: boundingMapRect.midX, y: boundingMapRect.midY).coordinate }
@@ -94,11 +99,13 @@ final class StreetTiles: NSObject, MKOverlay {
         return mainSquares.contains(Self.square(Int(floor(middle.latitude)), Int(floor(middle.longitude))))
     }
 
-    /// The levels to draw at a zoom.
-    static func levels(atZoom zoom: Double) -> [Int] {
-        if zoom >= residentialFrom { return [1, 2] }
-        if zoom >= mainFrom { return [1] }
-        if zoom >= overviewFrom { return [0] }
+    /// The levels to draw at a zoom. Files written before the wide level existed use the
+    /// overview for the widest views too.
+    func levels(atZoom zoom: Double) -> [Int] {
+        if zoom >= Self.residentialFrom { return [1, 2] }
+        if zoom >= Self.mainFrom { return [1] }
+        if zoom >= Self.overviewFrom { return [0] }
+        if zoom >= Self.wideFrom { return hasWide ? [3] : [0] }
         return []
     }
 
@@ -171,7 +178,7 @@ final class StreetTilesRenderer: MKOverlayRenderer {
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
         let started = ContinuousClock.now
         let zoom = RoadsRenderer.zoom(zoomScale)
-        let levels = StreetTiles.levels(atZoom: zoom)
+        let levels = tiles.levels(atZoom: zoom)
         guard !levels.isEmpty else { return }
         let area = RoadsRenderer.area(mapRect, zoomScale)
         let step = RoadsRenderer.step(zoomScale)

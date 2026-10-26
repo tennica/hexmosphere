@@ -7,11 +7,17 @@
 The input is either a folder of Overpass answers (fetch-basemap.sh streets) or a GeoJSON
 sequence of lines exported by osmium (fetch-basemap.sh extract).
 
-Streets are cut into 1° squares ("chunks") at three levels, so the app only reads what a
-map tile needs: level 0 is an overview of the main roads, simplified, for zooms 5 to 9;
-level 1 is every street shown before zoom 14, at full detail; level 2 is the residential
-streets, from zoom 14. A street crossing a square's edge is cut there, the two parts
-sharing the point where it crosses.
+Streets are cut into 1° squares ("chunks") at four levels, so the app only reads what a
+map tile needs: level 3 is the motorways and trunk roads, simplified to about 1 km, for the
+widest views (zooms 5 to 7); level 0 is an overview of the main roads, simplified to about
+100 m, for zooms 7 to 10; level 1 is every street shown before zoom 14, at full detail;
+level 2 is the residential streets, from zoom 14. A street crossing a square's edge is cut
+there, the two parts sharing the point where it crosses.
+
+OpenStreetMap splits a road into a new way at every bridge, junction and change of lanes,
+so for levels 3 and 0 the ways of each class are first joined end to end into long lines.
+Zoomed out, a tile then strokes a few thousand long lines instead of a hundred thousand
+fragments of two or three points.
 
 The file, little-endian:
     header   "HXST", uint16 version (1), uint16 0, uint32 chunk count,
@@ -30,6 +36,7 @@ import math
 import os
 import struct
 import sys
+from collections import defaultdict, deque
 
 PAD = 0.25    # how far a part may reach past its square, in degrees
 SPAN = 1 + 2 * PAD
@@ -38,6 +45,8 @@ LONGEST = 0.2  # longer segments get extra points, so a part never reaches past 
 OVERVIEW_ZOOM = 9  # classes shown before this zoom (or at it) go in the overview
 OVERVIEW_TOLERANCE = 0.001  # degrees, about 100 m: half a screen point at zoom 9
 DETAIL_ZOOM = 14  # classes shown from here are level 2
+WIDE_ZOOM = 6  # classes shown from this zoom or before go in level 3, the widest views
+WIDE_TOLERANCE = 0.01  # degrees, about 1 km: under a screen point at zoom 7
 
 # Kind (as in roads.bin) and the zoom level to show each class from.
 classes = {
@@ -117,6 +126,35 @@ def parts(line):
         yield here, part
 
 
+def join(lines):
+    """The lines joined end to end where one ends at another's start or end. A line
+    meeting two others at a junction carries on into either; the rest start lines of
+    their own."""
+    ends = defaultdict(list)
+    for i, line in enumerate(lines):
+        ends[line[0]].append(i)
+        ends[line[-1]].append(i)
+    used = [False] * len(lines)
+    for i, first in enumerate(lines):
+        if used[i]:
+            continue
+        used[i] = True
+        line = deque(first)
+        for forward in (True, False):
+            while True:
+                tip = line[-1] if forward else line[0]
+                j = next((j for j in ends[tip] if not used[j]), None)
+                if j is None:
+                    break
+                used[j] = True
+                more = lines[j]
+                if forward:
+                    line.extend((more if more[0] == tip else more[::-1])[1:])
+                else:
+                    line.extendleft(reversed((more if more[-1] == tip else more[::-1])[:-1]))
+        yield list(line)
+
+
 class Chunk:
     """One square at one level, packed as it fills, so a whole country fits in memory."""
 
@@ -148,6 +186,7 @@ def main():
                 chunks[key] = Chunk(south, west)
             chunks[key].add(kind, zoom, part)
 
+    overview = defaultdict(list)   # (kind, zoom) -> simplified lines, joined at the end
     for highway, line in lines(source):
         if len(line) < 2:
             continue
@@ -156,7 +195,17 @@ def main():
         points += len(line)
         add(2 if zoom >= DETAIL_ZOOM else 1, line, kind, zoom)
         if zoom <= OVERVIEW_ZOOM:
+            overview[(kind, zoom)].append(tuple(simplify(line, OVERVIEW_TOLERANCE)))
+
+    # Simplifying keeps each way's end points, so joined ways meet exactly.
+    joined = 0
+    for (kind, zoom), group in overview.items():
+        for line in join(group):
+            joined += 1
             add(0, simplify(line, OVERVIEW_TOLERANCE), kind, zoom)
+            if zoom <= WIDE_ZOOM:
+                add(3, simplify(line, WIDE_TOLERANCE), kind, zoom)
+    overview_ways = sum(len(group) for group in overview.values())
 
     entry = struct.Struct("<hhBBHQIIffff")
     keys = sorted(chunks)
@@ -169,9 +218,10 @@ def main():
             offset += len(chunk.body)
         for key in keys:
             out.write(chunks[key].body)
-    levels = [sum(1 for (l, _, _) in chunks if l == level) for level in range(3)]
+    levels = [sum(1 for (l, _, _) in chunks if l == level) for level in range(4)]
     print(f"streets: {streets} streets, {points} points; {len(keys)} chunks "
-          f"({levels[0]} overview, {levels[1]} main, {levels[2]} residential)")
+          f"({levels[3]} wide, {levels[0]} overview, {levels[1]} main, {levels[2]} residential); "
+          f"{overview_ways} main-road ways joined into {joined} lines")
 
 
 if __name__ == "__main__":
