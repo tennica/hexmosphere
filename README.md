@@ -4,7 +4,7 @@ A Mac, iPad and iPhone app that draws where your photos and videos were taken as
 
 **Whole Library…** reads the location, date and accuracy of every photo and video from the Photos library's own metadata. No image is opened or downloaded, so even a large library with originals in iCloud takes seconds. It needs Photos access, either Full or Limited to a chosen set, and never changes the library. Everything stays on the device unless you export it (see Exporting to Tiled).
 
-Tapping or clicking a hexagon shows its details and previews of up to 24 of its photos, newest first. The previews come from PhotoKit under the same Photos access, with no further permission. They're kept in memory only, never saved, and never downloaded from iCloud: a photo whose preview isn't on the device shows a cloud placeholder. On iPad and iPhone, iOS's occasional "select more photos?" prompt under Limited access is turned off.
+Tapping or clicking a hexagon shows its details and previews of up to 24 of its photos, newest first. The previews come from PhotoKit under the same Photos access, with no further permission. They're kept in memory only, never saved, and never downloaded from iCloud: a photo whose preview isn't on the device shows a cloud placeholder. Tap a preview to see it larger: PhotoKit renders it at 1024 pixels on the long side, never the original, under the same rules. On iPad and iPhone, iOS's occasional "select more photos?" prompt under Limited access is turned off.
 
 A new take on the 2015–2018 [SCUPPERfoundation/hexmosphere](https://github.com/SCUPPERfoundation/hexmosphere), which used DGGRID and a MapKit demo client.
 
@@ -245,7 +245,7 @@ so the smallest size waits for a good fix. In development and simulator builds, 
   - `HexMapView.swift`: MapKit, with one multipolygon per shade level and region
   - `HereTracker.swift`: Where I Am, Core Location turned into the hexagon you're in
   - `Basemap.swift`, `Roads.swift`, `Streets.swift`: the offline base map, roads and streets
-  - `Thumbnails.swift`: photo previews for a selected hexagon
+  - `Thumbnails.swift`: photo previews for a selected hexagon, and one photo larger
   - `TiledExport.swift`, `TiledLayout.swift`: the Tiled export and its north-up hex layout
 - `Packages/h3o-ffi`: a small Rust crate exposing four h3o functions to C, built into `CH3O.xcframework` (Mac and iOS)
 - `Packages/CH3`: Uber's H3 v4.5.0 C library, vendored unchanged as a SwiftPM C target (Apache-2.0; `LICENSE-h3`). `include/h3api.h` is generated from `h3api.h.in` with the version filled in. Source: the v4.5.0 release tarball, sha256 `0da8a392a6ff77e76b60e6a331a49497d0935b6b7b6899da7a3e2786139b0441`.
