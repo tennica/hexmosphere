@@ -109,6 +109,7 @@ struct ContentView: View {
         backendPicker.pickerStyle(.segmented).fixedSize()
         Divider().frame(height: 20)
         hereButton
+        driveButton
     }
 
     private func clear() {
@@ -152,17 +153,30 @@ struct ContentView: View {
             size()
             backendPicker.pickerStyle(.segmented).fixedSize()
             hereButton.labelStyle(.iconOnly)
+            driveButton.labelStyle(.iconOnly)
             exportButton.labelStyle(.iconOnly)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var hereButton: some View {
-        Toggle(isOn: Binding(get: { here.on }, set: { $0 ? here.start(size: size, backend: backend) : here.stop() })) {
-            Label("Where I Am", systemImage: here.on ? "location.fill" : "location")
+        Toggle(isOn: Binding(get: { here.on && !here.driving }, set: { $0 ? here.start(size: size, backend: backend) : here.stop() })) {
+            Label("Where I Am", systemImage: here.on && !here.driving ? "location.fill" : "location")
         }
         .toggleStyle(.button)
         .help("Outline the hexagon you're in. Asks for your location while the app is in use. Your position is never saved, exported or sent.")
+    }
+
+    /// Where I Am fed by the demo drive round San Francisco instead of your location.
+    /// Only in development and simulator builds.
+    @ViewBuilder private var driveButton: some View {
+        #if DEBUG || targetEnvironment(simulator)
+        Toggle(isOn: Binding(get: { here.driving }, set: { $0 ? here.drive(size: size, backend: backend) : here.stop() })) {
+            Label("Demo Drive", systemImage: here.driving ? "car.fill" : "car")
+        }
+        .toggleStyle(.button)
+        .help("Try Where I Am on a simulated drive round San Francisco, in place of your location.")
+        #endif
     }
 
     /// The line under the summary while Where I Am is on.
@@ -170,6 +184,7 @@ struct ContentView: View {
         if let note = here.note { return note }
         guard let cell = here.cell else { return "Finding where you are…" }
         let photos = binned.cells[cell].map { " · \($0.days.count) days and \($0.samples) photos here" } ?? " · no photos here yet"
+        if here.driving { return "Demo drive: in the outlined hexagon, \(cellName(cell))\(photos)." }
         return "You're in the outlined hexagon, \(cellName(cell))\(photos). It isn't saved or exported."
     }
 

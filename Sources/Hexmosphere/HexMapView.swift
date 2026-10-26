@@ -125,6 +125,7 @@ struct HexMapView: PlatformViewRepresentable {
     /// Outlines the hexagon you're in, replacing the last one only when it changes.
     private func showHere(_ map: MKMapView, _ coordinator: Coordinator) {
         guard coordinator.hereCell != here || coordinator.hereBackend != binned.backend else { return }
+        let found = coordinator.hereCell == nil
         coordinator.hereCell = here
         coordinator.hereBackend = binned.backend
         if let old = coordinator.hereOverlay {
@@ -141,6 +142,16 @@ struct HexMapView: PlatformViewRepresentable {
             map.addOverlay(overlay, level: .aboveLabels)
         }
         coordinator.hereOverlay = overlay
+        // When you're first found, go there: a dozen hexagons across, and never wider
+        // in view than about 5 km, so the smaller sizes still open on streets. After that
+        // the map stays where you put it, and the outline moves within it.
+        if found {
+            let cell = overlay.boundingMapRect
+            let floor = 5000 / MKMetersPerMapPointAtLatitude(overlay.coordinate.latitude)
+            let side = max(cell.width * 12, floor)
+            let area = MKMapRect(x: cell.midX - side / 2, y: cell.midY - side / 2, width: side, height: side)
+            map.setVisibleMapRect(area, animated: true)
+        }
     }
 
     /// Covers Apple's map with the bundled offline base map. Apple's map is

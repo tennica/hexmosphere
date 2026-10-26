@@ -228,11 +228,13 @@ Building needs the Rust part either way (see [Build](#build), step 3).
 ## Where I Am
 
 **Where I Am** in the toolbar outlines the hexagon you're in, at the chosen cell size, and
-the summary says how many days and photos you have there. It asks for your location only
+the summary says how many days and photos you have there. When it first finds you, the map
+zooms to show about a dozen hexagons around you (at least about 5 km across), then leaves
+the view to you while the outline follows. It asks for your location only
 when you turn it on, and only while the app is in use. While it's on, the app holds the last
 fix in memory, to place you again if you change the cell size; turning it off forgets it.
 Your position is never written to disk, never in a Tiled export, and never sent anywhere. As with photos, a fix less precise than the cell is wide places you in no hexagon,
-so the smallest size waits for a good fix. The older iPad build (`ios/`) doesn't have it.
+so the smallest size waits for a good fix. In development and simulator builds, **Demo Drive** (the car) runs Where I Am on a simulated loop round San Francisco at city speed instead of your location, for trying it anywhere. The older iPad build (`ios/`) doesn't have it.
 
 ## Layout
 
