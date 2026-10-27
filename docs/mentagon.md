@@ -51,7 +51,7 @@ Later, players anchor to one of the twelve pentagons. These rules come before an
 
 ## Thanks
 
-Thanks to Rob Lanphier ([@robla](https://github.com/robla)), who years ago first asked dvd how ocean and land change the privacy picture. It's a well-known point in privacy work, and asking it early is why these rules exist before the code does. Feedback is welcome: open an issue.
+Thanks to Rob Lanphier ([@robla](https://github.com/robla)), who years ago offered feedback on how ocean and land change the privacy picture. It's a well-known point in privacy work, and hearing it early is why these rules exist before the code does. Feedback is welcome: open an issue.
 
 Thanks also to Eiichiro Oda (Oda-san) and *One Piece*, whose world of islands scattered across open sea has kept dvd thinking about this stuff for years.
 
