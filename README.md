@@ -280,6 +280,7 @@ Downloads that are already there are skipped, and so are topo sheets already cro
 - `tools/make-icon.swift`: draws the app icon (a cell and its six neighbours in rainbow colours, inside a circle) into `Sources/Hexmosphere/Assets.xcassets`; the command is at the top of the file
 - `ios/`: an experimental Objective-C build for iOS 12 devices (for example, the iPad mini 3), compiled with `clang` because current Xcode won't target iOS 12. It reads the whole Photos library with permission, since iOS 12 has no limited picker. It's unsigned and not maintained.
 - `docs/inform.md`: hexagons as Inform 7 rooms, H3 sizes as regions, neighbours as compass exits (rooms and exits built in inform-federation)
+- `docs/mentagon.md`: the Mentagon, a starter world built from an empty H3 pentagon, and privacy rules for anchoring players to real places (a design)
 - `project.yml`: the XcodeGen project (targets `Hexmosphere` for macOS and `HexmosphereiOS` for iPad and iPhone)
 
 ## Ideas for later
