@@ -1,6 +1,6 @@
 # The Mentagon
 
-*A design, not built yet. It joins two older ideas: the [h6](https://github.com/SCUPPERfoundation/h6/tree/prototype) design from 2021, a prototype engine for the game Federation 3 that was also called Hexmosphere, and the hexagons-to-Inform-rooms plan in [inform.md](inform.md).*
+*A design, partly built: the Tiled export of the Mentagon exists, and the planet is next. It joins two older ideas: the [h6](https://github.com/SCUPPERfoundation/h6/tree/prototype) design from 2021, a prototype engine for the game Federation 3 that was also called Hexmosphere, and the hexagons-to-Inform-rooms plan in [inform.md](inform.md).*
 
 In h6, every new player starts in the Mentagon, a five-sided space with no real location. As players come to understand the world, they anchor themselves to one of the twelve pentagons H3 needs to cover a sphere, and together they claim hexagons, which split into finer cells once enough players make one their home.
 
@@ -24,7 +24,11 @@ The resolution 4 pentagon is about half the area of an average resolution 4 hexa
 
 ## Five sides at every level
 
-A hexagon has seven children; a pentagon has six: a smaller pentagon at its centre and five hexagons around it. So the pentagon recurs at every level, and the centre room of the Mentagon has five exits, not six. [inform.md](inform.md) names exits by a hexagon's sides, and the Tiled export leaves pentagons out, so both need a five-exit case: the same compass points as a hexagon, with one missing.
+A hexagon has seven children; a pentagon has six: a smaller pentagon at its centre and five hexagons around it. So the pentagon recurs at every level, and the centre room of the Mentagon has five exits, not six. [inform.md](inform.md) names exits by a hexagon's sides, so the pentagon's five are the same compass points as a hexagon's, with one missing.
+
+A pentagon can't lie flat. On the Tiled map, with the pentagon room as origin (from any other room, H3's local grid can't place 16 of the 41), 95 of the 100 pairs of neighbouring rooms touch. The other five open along the pentagon's missing direction, a seam that widens outwards, and get no exit. Every room can still be reached. Exits across the seam, named some other way than by compass, are left for later.
+
+Launching the app with `-export-mentagon <folder>` writes the Mentagon's Tiled map to that folder in the app's Documents (inside its container on the Mac): 41 rooms, each with its `region`, and `pentagon` on the centre room. inform-federation's converter turns it into a planet with exactly those 95 exits.
 
 As in inform.md, regions follow H3's index hierarchy, not geometry: a parent's children only roughly cover it, which a story won't notice.
 

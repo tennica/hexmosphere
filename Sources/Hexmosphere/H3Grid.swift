@@ -111,6 +111,38 @@ func localIJ(of cell: CellID, origin: CellID, backend: H3Backend) -> (i: Int, j:
     }
 }
 
+// Cell ids are the same in both backends, so these use the C library either way.
+
+/// Whether `cell` is one of the twelve pentagons H3 has at every resolution.
+func isPentagonCell(_ cell: CellID) -> Bool {
+    isPentagon(cell) != 0
+}
+
+func resolution(of cell: CellID) -> Int {
+    Int(getResolution(cell))
+}
+
+/// `cell`'s parent at a coarser `resolution`, or nil if there's none.
+func parent(of cell: CellID, at resolution: Int) -> CellID? {
+    var out: H3Index = 0
+    return cellToParent(cell, Int32(resolution), &out) == 0 ? out : nil
+}
+
+/// `cell`'s children at a finer `resolution`: seven per level for a hexagon, six for a pentagon.
+func children(of cell: CellID, at resolution: Int) -> [CellID] {
+    var count: Int64 = 0
+    guard cellToChildrenSize(cell, Int32(resolution), &count) == 0 else { return [] }
+    var out = [H3Index](repeating: 0, count: Int(count))
+    guard cellToChildren(cell, Int32(resolution), &out) == 0 else { return [] }
+    return out.filter { $0 != 0 }
+}
+
+/// The child at `cell`'s centre at a finer `resolution` (a pentagon's is a pentagon).
+func centreChild(of cell: CellID, at resolution: Int) -> CellID? {
+    var out: H3Index = 0
+    return cellToCenterChild(cell, Int32(resolution), &out) == 0 ? out : nil
+}
+
 func cellName(_ cell: CellID) -> String {
     String(cell, radix: 16)
 }

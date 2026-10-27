@@ -61,21 +61,55 @@ struct TiledExport {
         let backend = binned.backend
         let top = binned.cells.values.map { binned.value($0) }.max() ?? 0
         let inView = binned.cells.values.compactMap { cell -> (CellSummary, MKMapPoint)? in
-            let corners = outline(of: cell.id, backend: backend)
-            guard !corners.isEmpty else { return nil }
-            let points = corners.map(MKMapPoint.init)
-            let middle = MKMapPoint(x: points.map(\.x).reduce(0, +) / Double(points.count),
-                                    y: points.map(\.y).reduce(0, +) / Double(points.count))
+            guard let middle = Self.middle(of: cell.id, backend: backend) else { return nil }
             return visible.contains(middle) ? (cell, middle) : nil
         }
         guard top > 0, !inView.isEmpty else { throw TiledExportError.nothingInView }
 
         let centre = MKMapPoint(x: visible.midX, y: visible.midY).coordinate
-        let origin = cellFor(centre, size: size, backend: backend) ?? inView[0].0.id
+        // A pentagon in view is the origin: H3's local grid can't place cells on the far side
+        // of one from anywhere else.
+        let origin = inView.first { isPentagonCell($0.0.id) }?.0.id
+            ?? cellFor(centre, size: size, backend: backend) ?? inView[0].0.id
+        // A new name each time: reusing one collides with the copy iOS stages
+        // in the app's temporary folder, or with an earlier export.
+        let stamp = DateFormatter()
+        stamp.dateFormat = "yyyy-MM-dd HHmmss"
+        // Regions are the app's next cell size up, as in docs/inform.md.
+        try self.init(places: inView, value: binned.value, top: top, resolution: size.rawValue,
+                      regionResolution: max(0, size.rawValue - 2), backend: backend, origin: origin, centre: centre,
+                      name: "Hexmosphere res \(size.rawValue) \(stamp.string(from: Date()))")
+    }
 
+    /// The Mentagon (docs/mentagon.md): base cell 72's pentagon at resolution 4, open ocean, as
+    /// its 41 rooms at resolution 6 in 6 regions at resolution 5, with the pentagon room as
+    /// origin. Nothing in it has photos. Five neighbouring pairs of rooms don't touch on the
+    /// map: a pentagon can't lie flat, and its missing direction opens a seam.
+    static func mentagon(backend: H3Backend) throws -> TiledExport {
+        let base: CellID = 0x8091fffffffffff
+        guard let mentagon = centreChild(of: base, at: 4), let origin = centreChild(of: mentagon, at: 6),
+              let centre = middle(of: origin, backend: backend)?.coordinate else { throw TiledExportError.nothingInView }
+        let rooms = children(of: mentagon, at: 6).compactMap { id -> (CellSummary, MKMapPoint)? in
+            middle(of: id, backend: backend).map { (CellSummary(id: id), $0) }
+        }
+        return try TiledExport(places: rooms, value: { $0.samples }, top: 0, resolution: 6, regionResolution: 5,
+                               backend: backend, origin: origin, centre: centre, name: "Mentagon")
+    }
+
+    /// The middle of a cell's outline, as a map point.
+    private static func middle(of cell: CellID, backend: H3Backend) -> MKMapPoint? {
+        let points = outline(of: cell, backend: backend).map(MKMapPoint.init)
+        guard !points.isEmpty else { return nil }
+        return MKMapPoint(x: points.map(\.x).reduce(0, +) / Double(points.count),
+                          y: points.map(\.y).reduce(0, +) / Double(points.count))
+    }
+
+    private init(places: [(CellSummary, MKMapPoint)], value: (CellSummary) -> Int, top: Int, resolution: Int,
+                 regionResolution: Int, backend: H3Backend, origin: CellID, centre: CLLocationCoordinate2D,
+                 name: String) throws {
         var placed: [(cell: CellSummary, point: MKMapPoint, i: Int, j: Int)] = []
         var leftOut = 0
-        for (cell, point) in inView {
+        for (cell, point) in places {
             guard let ij = localIJ(of: cell.id, origin: origin, backend: backend) else {
                 leftOut += 1
                 continue
@@ -93,23 +127,30 @@ struct TiledExport {
         let date = ISO8601DateFormatter()
         date.formatOptions = [.withFullDate]
         for (index, (place, tile)) in zip(placed, layout.tiles).enumerated() {
-            let level = HexMapView.level(binned.value(place.cell), top: top)
+            let level = top > 0 ? HexMapView.level(value(place.cell), top: top) : 0
             data[tile.row * width + tile.column] = 1 + level
             let (x, y) = layout.centre(tile)
             let coordinate = place.point.coordinate
+            let visited = place.cell.samples > 0
+            var properties = [
+                Self.property("h3", "string", cellName(place.cell.id)),
+                Self.property("latitude", "float", coordinate.latitude),
+                Self.property("longitude", "float", coordinate.longitude),
+                Self.property("photos", "int", place.cell.samples),
+                Self.property("days", "int", place.cell.days.count),
+                Self.property("first", "string", visited ? date.string(from: place.cell.first) : ""),
+                Self.property("last", "string", visited ? date.string(from: place.cell.last) : ""),
+            ]
+            if let region = parent(of: place.cell.id, at: regionResolution) {
+                properties.append(Self.property("region", "string", cellName(region)))
+            }
+            if isPentagonCell(place.cell.id) {
+                properties.append(Self.property("pentagon", "bool", true))
+            }
             objects.append([
                 "id": index + 1, "name": "", "type": "h3cell",
                 "x": x, "y": y, "width": 0, "height": 0, "rotation": 0,
-                "point": true, "visible": true,
-                "properties": [
-                    Self.property("h3", "string", cellName(place.cell.id)),
-                    Self.property("latitude", "float", coordinate.latitude),
-                    Self.property("longitude", "float", coordinate.longitude),
-                    Self.property("photos", "int", place.cell.samples),
-                    Self.property("days", "int", place.cell.days.count),
-                    Self.property("first", "string", date.string(from: place.cell.first)),
-                    Self.property("last", "string", date.string(from: place.cell.last)),
-                ],
+                "point": true, "visible": true, "properties": properties,
             ])
         }
 
@@ -122,7 +163,8 @@ struct TiledExport {
             "infinite": false, "nextlayerid": 3, "nextobjectid": objects.count + 1,
             "properties": [
                 Self.property("source", "string", "Hexmosphere"),
-                Self.property("h3_resolution", "int", size.rawValue),
+                Self.property("h3_resolution", "int", resolution),
+                Self.property("region_resolution", "int", regionResolution),
                 Self.property("h3_backend", "string", backend.name),
                 Self.property("origin_cell", "string", cellName(origin)),
                 Self.property("centre_latitude", "float", centre.latitude),
@@ -155,11 +197,7 @@ struct TiledExport {
         ]))
         exported = placed.count
         self.leftOut = leftOut
-        // A new name each time: reusing one collides with the copy iOS stages
-        // in the app's temporary folder, or with an earlier export.
-        let stamp = DateFormatter()
-        stamp.dateFormat = "yyyy-MM-dd HHmmss"
-        suggestedName = "Hexmosphere res \(size.rawValue) \(stamp.string(from: Date()))"
+        suggestedName = name
     }
 
     private static func property(_ name: String, _ type: String, _ value: Any) -> [String: Any] {

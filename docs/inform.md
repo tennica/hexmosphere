@@ -32,7 +32,7 @@ H3's parents only approximately cover their children, so a region's edge is a li
 
 ## The Tiled export is halfway there
 
-Each hexagon in an export is an object with its H3 index, centre, photo count, days and first and last dates, and a blank name for you to fill in Tiled. A converter would:
+Each hexagon in an export is an object with its H3 index, centre, photo count, days, first and last dates and region, and a blank name for you to fill in Tiled. A converter would:
 
 1. Read the `places` layer of `hexmosphere.tmj`.
 2. Make a room for each hexagon that has a name, and leave unnamed hexagons out (or make them plain connecting rooms).
@@ -59,6 +59,6 @@ Tiled maps are plain files that many tools read, so the same named places could 
 
 ## Limits
 
-- **Distance:** H3's local grid only places cells within a limited range of the export's centre, and not across one of H3's twelve pentagons. An export reports how many cells it left out.
+- **Distance:** H3's local grid only places cells within a limited range of the export's centre, and across one of H3's twelve pentagons only from the pentagon itself, which an export with one in view uses as its origin. An export reports how many cells it left out.
 - **Six directions, not eight:** a story that needs all eight compass points, or up and down, needs hand-made exits on top.
 - **Privacy:** named places with visit counts say a lot about a person. The export already leaves out Photos library identifiers; a story built from it is as private as you keep it.

@@ -102,9 +102,22 @@ struct ContentView: View {
         .onChange(of: size) { selected = nil; rebin(); here.use(size: size, backend: backend) }
         .onChange(of: backend) { selected = nil; rebin(); here.use(size: size, backend: backend) }
         .onChange(of: samples.count) { rebin() }
-        // For testing: launching with -vintage <layer id> starts with that layer on, and
-        // -drive <route id> (e.g. route-66) starts that demo drive.
+        // For testing: launching with -vintage <layer id> starts with that layer on,
+        // -drive <route id> (e.g. route-66) starts that demo drive, and -export-mentagon
+        // <folder> writes the Mentagon's Tiled map (docs/mentagon.md) to that folder in the
+        // app's Documents, inside its container on macOS.
         .task {
+            if let folder = UserDefaults.standard.string(forKey: "export-mentagon") {
+                // Only the last part of the name, so it stays in Documents.
+                let url = URL.documentsDirectory.appending(path: URL(fileURLWithPath: folder).lastPathComponent)
+                do {
+                    try TiledExport.mentagon(backend: backend).document.folder
+                        .write(to: url, options: .atomic, originalContentsURL: nil)
+                    print("Mentagon written to \(url.path)")
+                } catch {
+                    print("Mentagon not written: \(error.localizedDescription)")
+                }
+            }
             if let id = UserDefaults.standard.string(forKey: "vintage") {
                 vintage = VintageLayer.all.first { $0.id == id }
             }
