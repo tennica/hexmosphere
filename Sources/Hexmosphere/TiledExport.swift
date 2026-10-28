@@ -78,7 +78,7 @@ struct TiledExport {
         // Regions are the app's next cell size up, as in docs/inform.md.
         try self.init(places: inView, value: binned.value, top: top, resolution: size.rawValue,
                       regionResolution: max(0, size.rawValue - 2), backend: backend, origin: origin, centre: centre,
-                      name: "Hexmosphere res \(size.rawValue) \(stamp.string(from: Date()))")
+                      name: "Hexmosphere res \(size.rawValue) \(stamp.string(from: Date()))", fictional: false)
     }
 
     /// The Mentagon (docs/mentagon.md): base cell 72's pentagon at resolution 4, open ocean, as
@@ -93,7 +93,7 @@ struct TiledExport {
             middle(of: id, backend: backend).map { (CellSummary(id: id), $0) }
         }
         return try TiledExport(places: rooms, value: { $0.samples }, top: 0, resolution: 6, regionResolution: 5,
-                               backend: backend, origin: origin, centre: centre, name: "Mentagon")
+                               backend: backend, origin: origin, centre: centre, name: "Mentagon", fictional: true)
     }
 
     /// The middle of a cell's outline, as a map point.
@@ -106,7 +106,7 @@ struct TiledExport {
 
     private init(places: [(CellSummary, MKMapPoint)], value: (CellSummary) -> Int, top: Int, resolution: Int,
                  regionResolution: Int, backend: H3Backend, origin: CellID, centre: CLLocationCoordinate2D,
-                 name: String) throws {
+                 name: String, fictional: Bool) throws {
         var placed: [(cell: CellSummary, point: MKMapPoint, i: Int, j: Int)] = []
         var leftOut = 0
         for (cell, point) in places {
@@ -163,6 +163,9 @@ struct TiledExport {
             "infinite": false, "nextlayerid": 3, "nextobjectid": objects.count + 1,
             "properties": [
                 Self.property("source", "string", "Hexmosphere"),
+                // Whether it holds no real places: true for the Mentagon, false for photos, so
+                // tools downstream (inform-federation's converter) never have to guess.
+                Self.property("fictional", "bool", fictional),
                 Self.property("h3_resolution", "int", resolution),
                 Self.property("region_resolution", "int", regionResolution),
                 Self.property("h3_backend", "string", backend.name),
