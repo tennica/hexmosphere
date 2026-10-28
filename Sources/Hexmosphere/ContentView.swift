@@ -281,12 +281,29 @@ struct ContentView: View {
     /// Opens a Tiled map onto the globe, or closes the one that's open.
     @ViewBuilder private var tiledButton: some View {
         if tiled == nil {
-            Button { openingTiled = true } label: { Label("Open Tiled…", systemImage: "map") }
+            // Maps already in the app's Documents (Files: On My iPad › Hexmosphere) open in one tap.
+            Menu {
+                let maps = documentMaps
+                ForEach(maps, id: \.self) { folder in
+                    Button(folder.lastPathComponent) { openTiled(folder) }
+                }
+                if !maps.isEmpty { Divider() }
+                Button("Browse…") { openingTiled = true }
+            } label: { Label("Open Tiled", systemImage: "map") }
                 .help("Show a hexagonal Tiled map (a folder with a .tmj) on the globe, where its properties say it goes.")
         } else {
             Button { tiled = nil; landmark = nil; tiledNote = nil } label: { Label("Close Tiled", systemImage: "map.fill") }
                 .help("Take the Tiled map off the globe.")
         }
+    }
+
+    /// Folders in the app's Documents that hold a Tiled map, by name. Read only; the app writes nothing there.
+    private var documentMaps: [URL] {
+        let files = FileManager.default
+        let folders = (try? files.contentsOfDirectory(at: URL.documentsDirectory, includingPropertiesForKeys: nil)) ?? []
+        return folders.filter { folder in
+            ((try? files.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []).contains { $0.pathExtension == "tmj" }
+        }.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     private func openTiled(_ url: URL) {
