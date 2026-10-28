@@ -159,6 +159,7 @@ struct HexMapView: PlatformViewRepresentable {
     /// Puts an opened Tiled map over the land and under the photos' cells, with its landmarks'
     /// names on top, replacing the last one only when it changes, and goes there.
     private func showTiled(_ map: MKMapView, _ coordinator: Coordinator) {
+        defer { showRoutes(map, coordinator) }
         guard coordinator.tiled?.id != tiled?.id else { return }
         if let old = coordinator.tiled {
             map.removeOverlays(old.areas)
@@ -180,6 +181,31 @@ struct HexMapView: PlatformViewRepresentable {
         let added: [MKOverlay] = tiled.areas + [tiled.labels]
         DispatchQueue.main.async { [weak map] in
             for overlay in added {
+                map?.renderer(for: overlay)?.setNeedsDisplay()
+            }
+        }
+    }
+
+    /// Draws the Tiled map's routes as cells at the chosen size, under its maps, redrawing
+    /// them when the size or the map changes.
+    private func showRoutes(_ map: MKMapView, _ coordinator: Coordinator) {
+        guard coordinator.routesDrawn?.map != tiled?.id || coordinator.routesDrawn?.resolution != size.rawValue else { return }
+        map.removeOverlays(coordinator.routeOverlays)
+        coordinator.routeOverlays = []
+        coordinator.routesDrawn = (tiled?.id, size.rawValue)
+        guard let tiled, !tiled.routes.isEmpty else { return }
+        let areas = tiled.routeAreas(resolution: size.rawValue)
+        let below = tiled.areas.first ?? coordinator.hexOverlays.first ?? coordinator.places
+        for area in areas {
+            if let below {
+                map.insertOverlay(area, below: below)
+            } else {
+                map.addOverlay(area, level: .aboveLabels)
+            }
+        }
+        coordinator.routeOverlays = areas
+        DispatchQueue.main.async { [weak map] in
+            for overlay in areas {
                 map?.renderer(for: overlay)?.setNeedsDisplay()
             }
         }
@@ -295,6 +321,8 @@ struct HexMapView: PlatformViewRepresentable {
         var vintageOverlay: VintageTiles?
         var hereOverlay: HereCell?
         var tiled: TiledOverlayMap?
+        var routeOverlays: [MKOverlay] = []
+        var routesDrawn: (map: UUID?, resolution: Int)?
         var onLandmark: (TiledOverlayMap.Landmark?) -> Void = { _ in }
 
         let visible: VisibleArea

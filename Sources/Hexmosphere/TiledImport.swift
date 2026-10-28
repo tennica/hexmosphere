@@ -12,9 +12,11 @@
 // Tiles are drawn in their image's main colour. Point objects with a name become
 // places, labelled on the map, with their description property shown when tapped.
 //
-// The folder can also hold hex corridors: GeoJSON whose features carry an "h3" cell
-// index and optionally a "fill" colour, as tools/hexchain.c writes them. They join
-// places too far apart for one flat map, such as two maps on different continents.
+// The folder can also hold hex corridors, GeoJSON joining places too far apart for one
+// flat map, such as two maps on different continents. A feature with an "h3" cell index
+// is that cell, as tools/hexchain.c writes them; a line is a route, each segment along
+// the great circle, drawn as the chain of cells it crosses at the app's cell size, so it
+// grows and shrinks with the size picker. Either takes an optional "fill" (#rrggbb).
 // Nothing is saved: the layer is gone when the app closes.
 
 import CH3
@@ -57,11 +59,18 @@ struct TiledOverlayMap: Identifiable {
     let areas: [StyledAreas]
     /// The places' names, drawn like the base map's place names.
     let labels: Places
+    /// Routes drawn as cells at the app's cell size (routeAreas).
+    let routes: [Route]
     let landmarks: [CellID: Landmark]
     let cells: Int
     /// Painted tiles H3 couldn't place around their origin (too far, or across a pentagon).
     let leftOut: Int
     let bounds: MKMapRect
+
+    struct Route {
+        let points: [CLLocationCoordinate2D]
+        let fill: Int
+    }
 
     /// What one map or corridor adds.
     private struct Piece {
@@ -69,6 +78,7 @@ struct TiledOverlayMap: Identifiable {
         var polygons: [Int: [MKPolygon]] = [:]
         var landmarks: [CellID: Landmark] = [:]
         var names: [Place] = []
+        var routes: [Route] = []
         var placed = 0
         var missed = 0
     }
@@ -96,27 +106,63 @@ struct TiledOverlayMap: Identifiable {
         // Corridors first, so the maps they join draw over them.
         let pieces = try corridors.compactMap(Self.corridor) + maps.map { try Self.map($0, folder: folder, backend: backend) }
         guard !pieces.isEmpty else { throw TiledImportError.nothingPlaced }
-        areas = pieces.flatMap { piece in
-            piece.polygons.flatMap { rgb, polygons in
-                let fill = (CGFloat(rgb >> 16 & 0xFF) / 255, CGFloat(rgb >> 8 & 0xFF) / 255, CGFloat(rgb & 0xFF) / 255)
-                return groupedByRegion(polygons).map { group in
-                    let overlay = StyledAreas(group)
-                    overlay.style = LayerStyle(kind: .fill, stroke: (fill.0 * 0.75, fill.1 * 0.75, fill.2 * 0.75),
-                                               fill: fill, width: 0.5, dash: nil)
-                    return overlay
-                }
-            }
-        }
+        areas = pieces.flatMap { $0.polygons.flatMap(Self.styled) }
+        routes = pieces.flatMap(\.routes)
         cells = pieces.map(\.placed).reduce(0, +)
         leftOut = pieces.map(\.missed).reduce(0, +)
-        bounds = areas.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
+        let routeBounds = routes.flatMap(\.points).map { MKMapRect(origin: MKMapPoint($0), size: MKMapSize(width: 0, height: 0)) }
+        bounds = (areas.map(\.boundingMapRect) + routeBounds).reduce(MKMapRect.null) { $0.union($1) }
         landmarks = pieces.reduce(into: [:]) { all, piece in all.merge(piece.landmarks) { first, _ in first } }
         labels = Places(pieces.flatMap(\.names))
         resolutions = Set(pieces.map(\.resolution)).sorted()
         name = folder.lastPathComponent
     }
 
-    /// One hex corridor: each feature's "h3" cell, in its "fill" colour (#rrggbb).
+    /// The routes as the chains of cells they cross at `resolution`, one overlay per colour and region.
+    func routeAreas(resolution: Int) -> [StyledAreas] {
+        var edge = 0.0
+        _ = getHexagonEdgeLengthAvgKm(Int32(resolution), &edge)
+        var byColour: [Int: [MKPolygon]] = [:]
+        for route in routes {
+            var seen = Set<CellID>()
+            for (a, b) in zip(route.points, route.points.dropFirst()) {
+                // Points a quarter of a cell edge apart along the great circle, so no cell is skipped.
+                let u = Self.vector(a), v = Self.vector(b)
+                let angle = acos(max(-1, min(1, u.0 * v.0 + u.1 * v.1 + u.2 * v.2)))
+                let steps = max(1, Int((angle * 6371.0088 / (edge / 4)).rounded(.up)))
+                for n in 0...steps {
+                    let t = Double(n) / Double(steps)
+                    let wa = angle > 0 ? sin((1 - t) * angle) / sin(angle) : 1 - t
+                    let wb = angle > 0 ? sin(t * angle) / sin(angle) : t
+                    let x = wa * u.0 + wb * v.0, y = wa * u.1 + wb * v.1, z = wa * u.2 + wb * v.2
+                    var point = LatLng(lat: atan2(z, (x * x + y * y).squareRoot()), lng: atan2(y, x))
+                    var cell: H3Index = 0
+                    guard latLngToCell(&point, Int32(resolution), &cell) == 0, seen.insert(cell).inserted,
+                          let polygon = cellPolygon(cell) else { continue }
+                    byColour[route.fill, default: []].append(polygon)
+                }
+            }
+        }
+        return byColour.flatMap(Self.styled)
+    }
+
+    private static func vector(_ c: CLLocationCoordinate2D) -> (Double, Double, Double) {
+        let lat = degsToRads(c.latitude), lng = degsToRads(c.longitude)
+        return (cos(lat) * cos(lng), cos(lat) * sin(lng), sin(lat))
+    }
+
+    /// Cell outlines in one colour (0xRRGGBB), edged a shade darker, grouped by region.
+    private static func styled(_ rgb: Int, _ polygons: [MKPolygon]) -> [StyledAreas] {
+        let fill = (CGFloat(rgb >> 16 & 0xFF) / 255, CGFloat(rgb >> 8 & 0xFF) / 255, CGFloat(rgb & 0xFF) / 255)
+        return groupedByRegion(polygons).map { group in
+            let overlay = StyledAreas(group)
+            overlay.style = LayerStyle(kind: .fill, stroke: (fill.0 * 0.75, fill.1 * 0.75, fill.2 * 0.75),
+                                       fill: fill, width: 0.5, dash: nil)
+            return overlay
+        }
+    }
+
+    /// One hex corridor: its features' "h3" cells and its routes, in their "fill" colours (#rrggbb).
     private static func corridor(_ file: URL) -> Piece? {
         guard let data = try? Data(contentsOf: file),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -124,14 +170,27 @@ struct TiledOverlayMap: Identifiable {
         var piece = Piece()
         for feature in features {
             let properties = feature["properties"] as? [String: Any] ?? [:]
+            let fill = (properties["fill"] as? String).flatMap { Int($0.dropFirst(), radix: 16) } ?? 0xC8553D
+            if properties["h3"] == nil, let geometry = feature["geometry"] as? [String: Any] {
+                let lines: [[[Double]]]
+                switch geometry["type"] as? String {
+                case "LineString": lines = [geometry["coordinates"] as? [[Double]] ?? []]
+                case "MultiLineString": lines = geometry["coordinates"] as? [[[Double]]] ?? []
+                default: lines = []
+                }
+                for line in lines where line.count >= 2 {
+                    piece.routes.append(Route(points: line.filter { $0.count >= 2 }
+                        .map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }, fill: fill))
+                }
+                continue
+            }
             guard let name = properties["h3"] as? String, let cell = CellID(name, radix: 16), isValidCell(cell) != 0,
                   let polygon = cellPolygon(cell) else { continue }
-            let fill = (properties["fill"] as? String).flatMap { Int($0.dropFirst(), radix: 16) } ?? 0xC8553D
             piece.polygons[fill, default: []].append(polygon)
             piece.resolution = Int(getResolution(cell))
             piece.placed += 1
         }
-        return piece.placed > 0 ? piece : nil
+        return piece.placed > 0 || !piece.routes.isEmpty ? piece : nil
     }
 
     /// One Tiled map, placed where its properties say.

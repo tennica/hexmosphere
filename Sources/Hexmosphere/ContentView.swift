@@ -301,6 +301,7 @@ struct ContentView: View {
                 tiled = map
                 landmark = nil
                 var note = "\(map.name): \(map.cells.formatted()) hexagons at res \(map.resolutions.map(String.init).joined(separator: " and ")), \(map.landmarks.count) landmarks"
+                if !map.routes.isEmpty { note += ", \(map.routes.count) route\(map.routes.count == 1 ? "" : "s") at the cell size" }
                 if map.leftOut > 0 { note += "; \(map.leftOut.formatted()) tiles left out, too far from its origin for H3's local grid" }
                 tiledNote = note + ". Tap a landmark to read it."
             case .failure(let error):
