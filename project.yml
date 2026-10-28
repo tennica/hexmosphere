@@ -72,6 +72,10 @@ targets:
         NSPhotoLibraryUsageDescription: Hexmosphere reads where and when your photos were taken, from the library's metadata, to draw them as hexagons, and shows small previews of the photos in a hexagon you select. It never changes your library, never downloads from iCloud, and nothing leaves this device unless you export it.
         NSLocationWhenInUseUsageDescription: Hexmosphere outlines the hexagon you're in when you turn on Where I Am. It uses your location only while the app is open, and never saves, exports or sends it.
         PHPhotoLibraryPreventAutomaticLimitedAccessAlert: true
+        # The app's Documents folder shows in Files (On My iPad / iPhone), so Tiled maps
+        # copied there can be picked with Open Tiled. The app keeps nothing else there.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations~iphone:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
