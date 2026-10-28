@@ -268,14 +268,22 @@ struct TiledOverlayMap: Identifiable {
             originTile = (width / 2, height / 2)
         }
 
-        // Lay out every cell near enough to cover the map, as the export would.
-        let k = width + height
+        // Lay out every cell near enough to cover the map, as the export would, and no more:
+        // rings only as far as the map's farthest corner from the origin (|columns| + |rows|
+        // bounds the steps), since past a pentagon H3's local grid hands back distorted
+        // positions that would claim tiles and skew the north-up fit (the HeusDenVerSe's island
+        // at resolution 3 reached past the North Pacific pentagon).
+        let corners = [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)]
+        let k = corners.map { abs($0.0 - originTile.column) + abs($0.1 - originTile.row) }.max()! + 2
         var size: Int64 = 0
         guard maxGridDiskSize(Int32(k), &size) == 0 else { throw TiledImportError.nothingPlaced }
         var disk = [H3Index](repeating: 0, count: Int(size))
-        guard gridDisk(origin, Int32(k), &disk) == 0 else { throw TiledImportError.nothingPlaced }
+        var rings = [Int32](repeating: 0, count: Int(size))
+        guard gridDiskDistances(origin, Int32(k), &disk, &rings) == 0 else { throw TiledImportError.nothingPlaced }
         var near: [(cell: CellID, i: Int, j: Int, x: Double, y: Double)] = []
-        for cell in disk where cell != 0 {
+        var ring: [CellID: Int32] = [:]
+        for (cell, distance) in zip(disk, rings) where cell != 0 {
+            ring[cell] = distance
             guard let ij = localIJ(of: cell, origin: origin, backend: backend) else { continue }
             var centre = LatLng()
             guard cellToLatLng(cell, &centre) == 0 else { continue }
@@ -298,6 +306,8 @@ struct TiledOverlayMap: Identifiable {
             let column = laid.column - laidOrigin.column + originTile.column
             let row = laid.row - laidOrigin.row + originTile.row
             guard (0..<width).contains(column), (0..<height).contains(row) else { continue }
+            // Two cells on one tile: the nearer to the origin is the real one.
+            if let held = cellAt[row * width + column], ring[held, default: 0] <= ring[entry.cell, default: 0] { continue }
             cellAt[row * width + column] = entry.cell
         }
 
