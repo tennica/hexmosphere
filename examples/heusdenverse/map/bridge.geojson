@@ -1,0 +1,26 @@
+{
+ "type": "FeatureCollection",
+ "name": "The HeusDenVerSe bridge",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "The HeusDenVerSe bridge",
+    "fill": "#c8553d"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      5.139,
+      51.735
+     ],
+     [
+      -104.99,
+      39.739
+     ]
+    ]
+   }
+  }
+ ]
+}
