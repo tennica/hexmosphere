@@ -303,10 +303,13 @@ struct ContentView: View {
                 var note = "\(map.name): \(map.cells.formatted()) hexagons at res \(map.resolutions.map(String.init).joined(separator: " and ")), \(map.landmarks.count) landmarks"
                 if !map.routes.isEmpty { note += ", \(map.routes.count) route\(map.routes.count == 1 ? "" : "s") at the cell size" }
                 if map.leftOut > 0 { note += "; \(map.leftOut.formatted()) tiles left out, too far from its origin for H3's local grid" }
+                if map.mismatched > 0 { note += "; \(map.mismatched.formatted()) places don't sit on the cell their h3 names" }
                 tiledNote = note + ". Tap a landmark to read it."
             case .failure(let error):
                 tiledNote = error.localizedDescription
             }
+            // For the -open-tiled test flag, where no one may be looking at the window.
+            print(tiledNote ?? "")
         }
     }
 

@@ -65,6 +65,9 @@ struct TiledOverlayMap: Identifiable {
     let cells: Int
     /// Painted tiles H3 couldn't place around their origin (too far, or across a pentagon).
     let leftOut: Int
+    /// Objects whose h3 property names a different cell from the one their tile landed on
+    /// (an export, or an authored planet that carries its cells): 0 when the layout round-trips.
+    let mismatched: Int
     let bounds: MKMapRect
 
     struct Route {
@@ -81,6 +84,7 @@ struct TiledOverlayMap: Identifiable {
         var routes: [Route] = []
         var placed = 0
         var missed = 0
+        var mismatched = 0
     }
 
     /// The landmark in the hexagon at `coordinate`, if any.
@@ -110,11 +114,13 @@ struct TiledOverlayMap: Identifiable {
         routes = pieces.flatMap(\.routes)
         cells = pieces.map(\.placed).reduce(0, +)
         leftOut = pieces.map(\.missed).reduce(0, +)
+        mismatched = pieces.map(\.mismatched).reduce(0, +)
         let routeBounds = routes.flatMap(\.points).map { MKMapRect(origin: MKMapPoint($0), size: MKMapSize(width: 0, height: 0)) }
         bounds = (areas.map(\.boundingMapRect) + routeBounds).reduce(MKMapRect.null) { $0.union($1) }
         landmarks = pieces.reduce(into: [:]) { all, piece in all.merge(piece.landmarks) { first, _ in first } }
         labels = Places(pieces.flatMap(\.names))
-        resolutions = Set(pieces.map(\.resolution)).sorted()
+        // A file holding only routes has no resolution of its own: they take the size picker's.
+        resolutions = Set(pieces.filter { $0.placed > 0 }.map(\.resolution)).sorted()
         name = folder.lastPathComponent
     }
 
@@ -312,6 +318,13 @@ struct TiledOverlayMap: Identifiable {
 
         // Named points are places; text objects are only labels for Tiled's own view.
         for object in objects where object["text"] == nil {
+            if let named = Self.properties(object["properties"])["h3"] as? String,
+               let x = Self.number(object["x"]), let y = Self.number(object["y"]) {
+                let at = tile(x: x, y: y)
+                let laid = (0..<width).contains(at.column) && (0..<height).contains(at.row)
+                    ? cellAt[at.row * width + at.column] : nil
+                if laid.map(cellName) != named { piece.mismatched += 1 }
+            }
             guard let name = object["name"] as? String, !name.isEmpty,
                   let x = Self.number(object["x"]), let y = Self.number(object["y"]) else { continue }
             let at = tile(x: x, y: y)
