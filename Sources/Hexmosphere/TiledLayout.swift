@@ -47,7 +47,10 @@ struct TiledLayout {
 
     /// `cells` are local I/J coordinates with each cell's position on a north-up
     /// plane (x east, y north; any scale), such as its map point with y negated.
-    init(cells: [(i: Int, j: Int, x: Double, y: Double)]) {
+    /// `kind`, if given, is used instead of whichever hexagon kind fits best, as when
+    /// opening a map already drawn with one kind (TiledImport); the map can then be up to
+    /// 30° from north up.
+    init(cells: [(i: Int, j: Int, x: Double, y: Double)], kind forced: Kind? = nil) {
         // Axial coordinates on a 60° basis: position = q·(1, 0) + r·(½, √3/2).
         // H3's J axis is 120° from I, so q = i − j and r = j.
         var axial = cells.map { (q: $0.i - $0.j, r: $0.j) }
@@ -64,7 +67,7 @@ struct TiledLayout {
         let flatSteps = Int(((theta - 30) / 60).rounded())
         let pointyLeft = theta - 60 * Double(pointySteps)
         let flatLeft = theta - 30 - 60 * Double(flatSteps)
-        kind = abs(pointyLeft) <= abs(flatLeft) ? .pointy : .flat
+        kind = forced ?? (abs(pointyLeft) <= abs(flatLeft) ? .pointy : .flat)
         residualDegrees = kind == .pointy ? pointyLeft : flatLeft
         let steps = ((kind == .pointy ? pointySteps : flatSteps) % 6 + 6) % 6
         for _ in 0..<steps { axial = axial.map(Self.rotate60) }

@@ -27,6 +27,11 @@ struct ContentView: View {
     @State private var here = HereTracker()
     /// The vintage layer shown over the land, if any. Not remembered between launches.
     @State private var vintage: VintageLayer?
+    /// An opened Tiled map shown on the globe, and the landmark last tapped on it. Not remembered.
+    @State private var tiled: TiledOverlayMap?
+    @State private var landmark: TiledOverlayMap.Landmark?
+    @State private var openingTiled = false
+    @State private var tiledNote: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +42,7 @@ struct ContentView: View {
                 HStack(spacing: 12) {
                     toolbarControls
                     Spacer()
+                    tiledButton
                     exportButton
                 }
                 compactToolbar { sizePicker.pickerStyle(.segmented).fixedSize() }
@@ -46,9 +52,12 @@ struct ContentView: View {
 
             ZStack(alignment: .bottomLeading) {
                 HexMapView(binned: binned, size: size, onSelect: { selected = $0 }, visible: visible,
-                           here: here.cell, hereTrip: here.trip, follow: here.driving, vintage: vintage)
+                           here: here.cell, hereTrip: here.trip, follow: here.driving, vintage: vintage,
+                           tiled: tiled, onLandmark: { landmark = $0 })
                 if let selected {
                     CellCard(cell: selected).padding(12)
+                } else if let landmark {
+                    LandmarkCard(landmark: landmark).padding(12)
                 }
                 if busy {
                     ProgressView(progressText).padding(12)
@@ -69,6 +78,11 @@ struct ContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 if here.on {
                     Text(hereText)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                if let tiledNote {
+                    Text(tiledNote)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -99,14 +113,24 @@ struct ContentView: View {
                 exportNote = "Export failed: \(error.localizedDescription)"
             }
         }
+        .fileImporter(isPresented: $openingTiled, allowedContentTypes: [.folder]) { result in
+            switch result {
+            case .success(let url): openTiled(url)
+            case .failure(let error): tiledNote = "Couldn't open the Tiled map: \(error.localizedDescription)"
+            }
+        }
         .onChange(of: size) { selected = nil; rebin(); here.use(size: size, backend: backend) }
         .onChange(of: backend) { selected = nil; rebin(); here.use(size: size, backend: backend) }
         .onChange(of: samples.count) { rebin() }
         // For testing: launching with -vintage <layer id> starts with that layer on,
         // -drive <route id> (e.g. route-66) starts that demo drive, and -export-mentagon
         // <folder> writes the Mentagon's Tiled map (docs/mentagon.md) to that folder in the
-        // app's Documents, inside its container on macOS.
+        // app's Documents, inside its container on macOS; -open-tiled <folder> opens the Tiled
+        // map in that folder there.
         .task {
+            if let folder = UserDefaults.standard.string(forKey: "open-tiled") {
+                openTiled(URL.documentsDirectory.appending(path: URL(fileURLWithPath: folder).lastPathComponent))
+            }
             if let folder = UserDefaults.standard.string(forKey: "export-mentagon") {
                 // Only the last part of the name, so it stays in Documents.
                 let url = URL.documentsDirectory.appending(path: URL(fileURLWithPath: folder).lastPathComponent)
@@ -182,6 +206,7 @@ struct ContentView: View {
             hereButton.labelStyle(.iconOnly)
             driveButton.labelStyle(.iconOnly)
             vintageMenu.labelStyle(.iconOnly)
+            tiledButton.labelStyle(.iconOnly)
             exportButton.labelStyle(.iconOnly)
         }
         .frame(maxWidth: .infinity)
@@ -251,6 +276,37 @@ struct ContentView: View {
         Button { exportTiled() } label: { Label("Export Tiled…", systemImage: "square.and.arrow.up") }
             .disabled(binned.cells.isEmpty)
             .help("Save the hexagons in view as a Tiled map (a folder with hexmosphere.tmj), with each hexagon as a place to name.")
+    }
+
+    /// Opens a Tiled map onto the globe, or closes the one that's open.
+    @ViewBuilder private var tiledButton: some View {
+        if tiled == nil {
+            Button { openingTiled = true } label: { Label("Open Tiled…", systemImage: "map") }
+                .help("Show a hexagonal Tiled map (a folder with a .tmj) on the globe, where its properties say it goes.")
+        } else {
+            Button { tiled = nil; landmark = nil; tiledNote = nil } label: { Label("Close Tiled", systemImage: "map.fill") }
+                .help("Take the Tiled map off the globe.")
+        }
+    }
+
+    private func openTiled(_ url: URL) {
+        let backend = backend
+        tiledNote = "Opening \(url.lastPathComponent)…"
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                Result { try TiledOverlayMap(folder: url, backend: backend) }
+            }.value
+            switch result {
+            case .success(let map):
+                tiled = map
+                landmark = nil
+                var note = "\(map.name): \(map.cells.formatted()) hexagons at res \(map.resolution), \(map.landmarks.count) landmarks"
+                if map.leftOut > 0 { note += "; \(map.leftOut.formatted()) tiles left out, too far from its origin for H3's local grid" }
+                tiledNote = note + ". Tap a landmark to read it."
+            case .failure(let error):
+                tiledNote = error.localizedDescription
+            }
+        }
     }
 
     private var progressText: String {
@@ -356,6 +412,23 @@ struct RoadTimes: View {
     private func milliseconds(_ duration: Duration) -> String {
         let value = Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
         return String(format: "%.1f ms", value)
+    }
+}
+
+struct LandmarkCard: View {
+    let landmark: TiledOverlayMap.Landmark
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(landmark.name).font(.headline)
+            if !landmark.description.isEmpty {
+                Text(landmark.description).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(cellName(landmark.cell)).font(.caption.monospaced()).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: 480, alignment: .leading)
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

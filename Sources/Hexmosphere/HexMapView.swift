@@ -30,6 +30,10 @@ struct HexMapView: PlatformViewRepresentable {
     var follow = false
     /// The vintage layer drawn over the land, if one is chosen.
     var vintage: VintageLayer? = nil
+    /// An opened Tiled map, drawn over the land; the map goes there when it opens.
+    var tiled: TiledOverlayMap? = nil
+    /// A click or tap on one of the Tiled map's landmarks.
+    var onLandmark: (TiledOverlayMap.Landmark?) -> Void = { _ in }
 
     static let levels = 6
 
@@ -74,8 +78,10 @@ struct HexMapView: PlatformViewRepresentable {
         coordinator.binned = binned
         coordinator.size = size
         coordinator.onSelect = onSelect
+        coordinator.onLandmark = onLandmark
         showHere(map, coordinator)
         showVintage(map, coordinator)
+        showTiled(map, coordinator)
         // SwiftUI calls this for any change in the window; rebuild the cells
         // only when they changed, or redrawing them can feed back into here.
         guard coordinator.drawnID != binned.id else { return }
@@ -148,6 +154,35 @@ struct HexMapView: PlatformViewRepresentable {
             map.addOverlay(overlay, level: .aboveLabels)
         }
         coordinator.vintageOverlay = overlay
+    }
+
+    /// Puts an opened Tiled map over the land and under the photos' cells, with its landmarks'
+    /// names on top, replacing the last one only when it changes, and goes there.
+    private func showTiled(_ map: MKMapView, _ coordinator: Coordinator) {
+        guard coordinator.tiled?.id != tiled?.id else { return }
+        if let old = coordinator.tiled {
+            map.removeOverlays(old.areas)
+            map.removeOverlay(old.labels)
+        }
+        coordinator.tiled = tiled
+        guard let tiled else { return }
+        let below = coordinator.hexOverlays.first ?? coordinator.places
+        for area in tiled.areas {
+            if let below {
+                map.insertOverlay(area, below: below)
+            } else {
+                map.addOverlay(area, level: .aboveLabels)
+            }
+        }
+        map.addOverlay(tiled.labels, level: .aboveLabels)
+        let bounds = tiled.bounds, margin = max(bounds.width, bounds.height) * 0.15
+        map.setVisibleMapRect(bounds.insetBy(dx: -margin, dy: -margin), animated: true)
+        let added: [MKOverlay] = tiled.areas + [tiled.labels]
+        DispatchQueue.main.async { [weak map] in
+            for overlay in added {
+                map?.renderer(for: overlay)?.setNeedsDisplay()
+            }
+        }
     }
 
     /// Outlines the hexagon you're in, replacing the last one only when it changes.
@@ -259,6 +294,8 @@ struct HexMapView: PlatformViewRepresentable {
         var hereTrip = 0
         var vintageOverlay: VintageTiles?
         var hereOverlay: HereCell?
+        var tiled: TiledOverlayMap?
+        var onLandmark: (TiledOverlayMap.Landmark?) -> Void = { _ in }
 
         let visible: VisibleArea
 
@@ -297,6 +334,11 @@ struct HexMapView: PlatformViewRepresentable {
             guard let gesture = gesture as? UIGestureRecognizer, let map = gesture.view as? MKMapView else { return }
             #endif
             let coordinate = map.convert(gesture.location(in: map), toCoordinateFrom: map)
+            if let tiled {
+                let landmark = tiled.landmark(at: coordinate)
+                onLandmark(landmark)
+                if landmark != nil { return onSelect(nil) }
+            }
             guard let cell = cellFor(coordinate, size: size, backend: binned.backend) else { return onSelect(nil) }
             onSelect(binned.cells[cell])
         }

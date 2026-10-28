@@ -1,0 +1,272 @@
+// SPDX-License-Identifier: Apache-2.0
+// Opens a Tiled hexagonal map (a folder holding a .tmj and its tile images) as a layer
+// on the globe: the reverse of TiledExport.
+//
+// The map's properties say where it goes: origin_cell, an H3 cell, or else
+// centre_latitude, centre_longitude and h3_resolution, as an export writes them.
+// origin_column and origin_row name the tile the origin sits on; without them, an
+// exported map's own h3 objects find it, and a hand-drawn map is centred on it. The
+// cells around the origin are laid out as the export lays them out, north up with the
+// map's hexagon kind, and each tile takes the cell that lands on it.
+//
+// Tiles are drawn in their image's main colour. Point objects with a name become
+// places, labelled on the map, with their description property shown when tapped.
+// Nothing is saved: the layer is gone when the app closes.
+
+import CH3
+import CoreGraphics
+import Foundation
+import ImageIO
+import MapKit
+
+enum TiledImportError: LocalizedError {
+    case noMap
+    case notHexagonal
+    case noOrigin
+    case unreadable(String)
+    case nothingPlaced
+
+    var errorDescription: String? {
+        switch self {
+        case .noMap: "That folder has no Tiled map (.tmj) in it."
+        case .notHexagonal: "Only hexagonal Tiled maps can go on the globe."
+        case .noOrigin:
+            "The map doesn't say where it goes. Give it an origin_cell property, or centre_latitude, centre_longitude and h3_resolution."
+        case .unreadable(let why): "The Tiled map couldn't be read: \(why)."
+        case .nothingPlaced: "None of the map's tiles could be placed on H3 cells around its origin."
+        }
+    }
+}
+
+struct TiledOverlayMap: Identifiable {
+    struct Landmark {
+        let name: String
+        let description: String
+        let cell: CellID
+    }
+
+    let id = UUID()
+    let name: String
+    let resolution: Int
+    /// The tiles as cell outlines, one overlay per colour and region.
+    let areas: [StyledAreas]
+    /// The places' names, drawn like the base map's place names.
+    let labels: Places
+    let landmarks: [CellID: Landmark]
+    let cells: Int
+    /// Painted tiles H3 couldn't place around the origin (too far, or across a pentagon).
+    let leftOut: Int
+    let bounds: MKMapRect
+
+    /// The landmark in the hexagon at `coordinate`, if any.
+    func landmark(at coordinate: CLLocationCoordinate2D) -> Landmark? {
+        var point = LatLng(lat: degsToRads(coordinate.latitude), lng: degsToRads(coordinate.longitude))
+        var cell: H3Index = 0
+        guard latLngToCell(&point, Int32(resolution), &cell) == 0 else { return nil }
+        return landmarks[cell]
+    }
+
+    /// Reads the first .tmj in `folder`. Call off the main thread: it lays out thousands of cells.
+    init(folder: URL, backend: H3Backend) throws {
+        let scoped = folder.startAccessingSecurityScopedResource()
+        defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        guard let file = files.filter({ $0.pathExtension == "tmj" }).sorted(by: { $0.path < $1.path }).first else {
+            throw TiledImportError.noMap
+        }
+        let json: [String: Any]
+        do {
+            json = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any] ?? [:]
+        } catch {
+            throw TiledImportError.unreadable(error.localizedDescription)
+        }
+        guard json["orientation"] as? String == "hexagonal",
+              let width = json["width"] as? Int, let height = json["height"] as? Int,
+              let tileWidth = json["tilewidth"] as? Int, let tileHeight = json["tileheight"] as? Int else {
+            throw TiledImportError.notHexagonal
+        }
+        let kind: TiledLayout.Kind = json["staggeraxis"] as? String == "x" ? .flat : .pointy
+        let staggerOdd = json["staggerindex"] as? String != "even"
+        let side = json["hexsidelength"] as? Int ?? 0
+        let properties = Self.properties(json["properties"])
+
+        // Where it goes.
+        let origin: CellID
+        if let name = properties["origin_cell"] as? String, let cell = CellID(name, radix: 16), isValidCell(cell) != 0 {
+            origin = cell
+        } else if let latitude = Self.number(properties["centre_latitude"]),
+                  let longitude = Self.number(properties["centre_longitude"]),
+                  let res = properties["h3_resolution"] as? Int {
+            var point = LatLng(lat: degsToRads(latitude), lng: degsToRads(longitude))
+            var cell: H3Index = 0
+            guard latLngToCell(&point, Int32(res), &cell) == 0 else { throw TiledImportError.noOrigin }
+            origin = cell
+        } else {
+            throw TiledImportError.noOrigin
+        }
+        resolution = Int(getResolution(origin))
+
+        let layers = json["layers"] as? [[String: Any]] ?? []
+        let objects = layers.filter { $0["type"] as? String == "objectgroup" && $0["visible"] as? Bool != false }
+            .flatMap { $0["objects"] as? [[String: Any]] ?? [] }
+
+        // Which tile a point in Tiled's pixels falls on, and whether its row (or column) is shifted.
+        func shifted(_ index: Int) -> Bool { index.isMultiple(of: 2) != staggerOdd }
+        func tile(x: Double, y: Double) -> (column: Int, row: Int) {
+            switch kind {
+            case .pointy:
+                let row = Int(((y - Double(tileHeight) / 2) / (Double(tileHeight + side) / 2)).rounded())
+                let column = Int(((x - Double(tileWidth) / 2 - (shifted(row) ? Double(tileWidth) / 2 : 0)) / Double(tileWidth)).rounded())
+                return (column, row)
+            case .flat:
+                let column = Int(((x - Double(tileWidth) / 2) / (Double(tileWidth + side) / 2)).rounded())
+                let row = Int(((y - Double(tileHeight) / 2 - (shifted(column) ? Double(tileHeight) / 2 : 0)) / Double(tileHeight)).rounded())
+                return (column, row)
+            }
+        }
+
+        // The origin's tile: given, or the export's own h3 object for it, or the middle.
+        var originTile: (column: Int, row: Int)
+        if let column = properties["origin_column"] as? Int, let row = properties["origin_row"] as? Int {
+            originTile = (column, row)
+        } else if let object = objects.first(where: { Self.properties($0["properties"])["h3"] as? String == cellName(origin) }),
+                  let x = Self.number(object["x"]), let y = Self.number(object["y"]) {
+            originTile = tile(x: x, y: y)
+        } else {
+            originTile = (width / 2, height / 2)
+        }
+
+        // Lay out every cell near enough to cover the map, as the export would.
+        let k = width + height
+        var size: Int64 = 0
+        guard maxGridDiskSize(Int32(k), &size) == 0 else { throw TiledImportError.nothingPlaced }
+        var disk = [H3Index](repeating: 0, count: Int(size))
+        guard gridDisk(origin, Int32(k), &disk) == 0 else { throw TiledImportError.nothingPlaced }
+        var near: [(cell: CellID, i: Int, j: Int, x: Double, y: Double)] = []
+        for cell in disk where cell != 0 {
+            guard let ij = localIJ(of: cell, origin: origin, backend: backend) else { continue }
+            var centre = LatLng()
+            guard cellToLatLng(cell, &centre) == 0 else { continue }
+            let point = MKMapPoint(CLLocationCoordinate2D(latitude: radsToDegs(centre.lat), longitude: radsToDegs(centre.lng)))
+            // Map points grow southwards; the layout wants north up.
+            near.append((cell, ij.i, ij.j, point.x, -point.y))
+        }
+        let layout = TiledLayout(cells: near.map { ($0.i, $0.j, $0.x, $0.y) }, kind: kind)
+        guard let at = near.firstIndex(where: { $0.cell == origin }) else { throw TiledImportError.nothingPlaced }
+        let laidOrigin = layout.tiles[at]
+        // A staggered grid can only be moved by whole rows (or columns) of the same stagger;
+        // if the origin's tile has the other one, use its neighbour.
+        if kind == .pointy, shifted(originTile.row) != laidOrigin.shifted {
+            originTile.row += originTile.row + 1 < height ? 1 : -1
+        } else if kind == .flat, shifted(originTile.column) != laidOrigin.shifted {
+            originTile.column += originTile.column + 1 < width ? 1 : -1
+        }
+        var cellAt: [Int: CellID] = [:]
+        for (entry, laid) in zip(near, layout.tiles) {
+            let column = laid.column - laidOrigin.column + originTile.column
+            let row = laid.row - laidOrigin.row + originTile.row
+            guard (0..<width).contains(column), (0..<height).contains(row) else { continue }
+            cellAt[row * width + column] = entry.cell
+        }
+
+        // The painted tiles, later layers over earlier ones.
+        var gids = [Int](repeating: 0, count: width * height)
+        for layer in layers where layer["type"] as? String == "tilelayer" && layer["visible"] as? Bool != false {
+            guard layer["encoding"] == nil, let data = layer["data"] as? [Int], data.count == gids.count else { continue }
+            for (index, gid) in data.enumerated() where gid != 0 {
+                gids[index] = gid & 0x1FFF_FFFF  // without Tiled's flip flags
+            }
+        }
+        let colours = Self.tileColours(json["tilesets"], folder: folder)
+        var byColour: [Int: [MKPolygon]] = [:]
+        var placed = 0, missed = 0
+        for (index, gid) in gids.enumerated() where gid != 0 {
+            guard let cell = cellAt[index], let polygon = cellPolygon(cell) else {
+                missed += 1
+                continue
+            }
+            byColour[colours[gid] ?? 0x9A9A9A, default: []].append(polygon)
+            placed += 1
+        }
+        guard placed > 0 else { throw TiledImportError.nothingPlaced }
+        areas = byColour.flatMap { rgb, polygons in
+            let fill = (CGFloat(rgb >> 16 & 0xFF) / 255, CGFloat(rgb >> 8 & 0xFF) / 255, CGFloat(rgb & 0xFF) / 255)
+            return groupedByRegion(polygons).map { group in
+                let overlay = StyledAreas(group)
+                overlay.style = LayerStyle(kind: .fill, stroke: (fill.0 * 0.75, fill.1 * 0.75, fill.2 * 0.75), fill: fill,
+                                           width: 0.5, dash: nil)
+                return overlay
+            }
+        }
+        cells = placed
+        leftOut = missed
+        bounds = areas.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
+
+        // Named points are places; text objects are only labels for Tiled's own view.
+        var landmarks: [CellID: Landmark] = [:]
+        var names: [Place] = []
+        for object in objects where object["text"] == nil {
+            guard let name = object["name"] as? String, !name.isEmpty,
+                  let x = Self.number(object["x"]), let y = Self.number(object["y"]) else { continue }
+            let at = tile(x: x, y: y)
+            guard (0..<width).contains(at.column), (0..<height).contains(at.row),
+                  let cell = cellAt[at.row * width + at.column] else { continue }
+            let description = Self.properties(object["properties"])["description"] as? String ?? ""
+            landmarks[cell] = Landmark(name: name, description: description, cell: cell)
+            var centre = LatLng()
+            guard cellToLatLng(cell, &centre) == 0 else { continue }
+            let point = MKMapPoint(CLLocationCoordinate2D(latitude: radsToDegs(centre.lat), longitude: radsToDegs(centre.lng)))
+            names.append(Place(point: point, name: name, tier: 0))
+        }
+        self.landmarks = landmarks
+        labels = Places(names)
+        name = file.deletingPathExtension().lastPathComponent
+    }
+
+    /// Tiled's property list as a dictionary.
+    private static func properties(_ list: Any?) -> [String: Any] {
+        var out: [String: Any] = [:]
+        for item in list as? [[String: Any]] ?? [] {
+            if let name = item["name"] as? String, let value = item["value"] { out[name] = value }
+        }
+        return out
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        (value as? NSNumber)?.doubleValue
+    }
+
+    /// Each tile's main colour (as 0xRRGGBB, by gid): the commonest opaque colour in its
+    /// part of the tileset image, so outlines and small marks don't tint it.
+    private static func tileColours(_ tilesets: Any?, folder: URL) -> [Int: Int] {
+        var colours: [Int: Int] = [:]
+        for tileset in tilesets as? [[String: Any]] ?? [] {
+            guard let first = tileset["firstgid"] as? Int, let path = tileset["image"] as? String,
+                  let width = tileset["tilewidth"] as? Int, let height = tileset["tileheight"] as? Int,
+                  let count = tileset["tilecount"] as? Int, let columns = tileset["columns"] as? Int, columns > 0,
+                  let source = CGImageSourceCreateWithURL(folder.appending(path: path) as CFURL, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { continue }
+            let margin = tileset["margin"] as? Int ?? 0, spacing = tileset["spacing"] as? Int ?? 0
+            let w = image.width, h = image.height
+            guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+            guard let pixels = context.data else { continue }
+            let bytes = pixels.bindMemory(to: UInt8.self, capacity: w * h * 4)
+            for id in 0..<count {
+                let left = margin + (id % columns) * (width + spacing), top = margin + (id / columns) * (height + spacing)
+                var tally: [Int: Int] = [:]
+                for y in top..<min(top + height, h) {
+                    for x in left..<min(left + width, w) {
+                        let p = (y * w + x) * 4
+                        guard bytes[p + 3] == 255 else { continue }
+                        tally[Int(bytes[p]) << 16 | Int(bytes[p + 1]) << 8 | Int(bytes[p + 2]), default: 0] += 1
+                    }
+                }
+                if let commonest = tally.max(by: { $0.value < $1.value })?.key { colours[first + id] = commonest }
+            }
+        }
+        return colours
+    }
+}
