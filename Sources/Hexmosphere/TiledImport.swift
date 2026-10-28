@@ -16,7 +16,9 @@
 // flat map, such as two maps on different continents. A feature with an "h3" cell index
 // is that cell, as tools/hexchain.c writes them; a line is a route, each segment along
 // the great circle, drawn as the chain of cells it crosses at the app's cell size, so it
-// grows and shrinks with the size picker. Either takes an optional "fill" (#rrggbb).
+// grows and shrinks with the size picker. Either takes an optional "fill" (#rrggbb). A feature
+// with "landmark": true, an "h3" cell and a "name" (and "description") is a landmark there
+// instead, labelled like a map's.
 // Nothing is saved: the layer is gone when the app closes.
 
 import CH3
@@ -195,13 +197,23 @@ struct TiledOverlayMap: Identifiable {
                 }
                 continue
             }
+            if properties["landmark"] as? Bool == true, let title = properties["name"] as? String, !title.isEmpty,
+               let named = properties["h3"] as? String, let cell = CellID(named, radix: 16), isValidCell(cell) != 0 {
+                piece.landmarks[cell] = Landmark(name: title, description: properties["description"] as? String ?? "", cell: cell)
+                var centre = LatLng()
+                if cellToLatLng(cell, &centre) == 0 {
+                    let point = MKMapPoint(CLLocationCoordinate2D(latitude: radsToDegs(centre.lat), longitude: radsToDegs(centre.lng)))
+                    piece.names.append(Place(point: point, name: title, tier: 0))
+                }
+                continue
+            }
             guard let name = properties["h3"] as? String, let cell = CellID(name, radix: 16), isValidCell(cell) != 0,
                   let polygon = cellPolygon(cell) else { continue }
             piece.polygons[fill, default: []].append(polygon)
             piece.resolution = Int(getResolution(cell))
             piece.placed += 1
         }
-        return piece.placed > 0 || !piece.routes.isEmpty ? piece : nil
+        return piece.placed > 0 || !piece.routes.isEmpty || !piece.landmarks.isEmpty ? piece : nil
     }
 
     /// One Tiled map, placed where its properties say.
