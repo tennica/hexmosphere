@@ -93,17 +93,18 @@ struct TiledOverlayMap: Identifiable {
             .sorted { $0.path < $1.path }
         let maps = files.filter { $0.pathExtension == "tmj" }, corridors = files.filter { $0.pathExtension == "geojson" }
         guard !maps.isEmpty || !corridors.isEmpty else { throw TiledImportError.noMap }
-        let pieces = try maps.map { try Self.map($0, folder: folder, backend: backend) } + corridors.compactMap(Self.corridor)
-        var byColour: [Int: [MKPolygon]] = [:]
-        for piece in pieces { byColour.merge(piece.polygons) { $0 + $1 } }
-        guard !byColour.isEmpty else { throw TiledImportError.nothingPlaced }
-        areas = byColour.flatMap { rgb, polygons in
-            let fill = (CGFloat(rgb >> 16 & 0xFF) / 255, CGFloat(rgb >> 8 & 0xFF) / 255, CGFloat(rgb & 0xFF) / 255)
-            return groupedByRegion(polygons).map { group in
-                let overlay = StyledAreas(group)
-                overlay.style = LayerStyle(kind: .fill, stroke: (fill.0 * 0.75, fill.1 * 0.75, fill.2 * 0.75), fill: fill,
-                                           width: 0.5, dash: nil)
-                return overlay
+        // Corridors first, so the maps they join draw over them.
+        let pieces = try corridors.compactMap(Self.corridor) + maps.map { try Self.map($0, folder: folder, backend: backend) }
+        guard !pieces.isEmpty else { throw TiledImportError.nothingPlaced }
+        areas = pieces.flatMap { piece in
+            piece.polygons.flatMap { rgb, polygons in
+                let fill = (CGFloat(rgb >> 16 & 0xFF) / 255, CGFloat(rgb >> 8 & 0xFF) / 255, CGFloat(rgb & 0xFF) / 255)
+                return groupedByRegion(polygons).map { group in
+                    let overlay = StyledAreas(group)
+                    overlay.style = LayerStyle(kind: .fill, stroke: (fill.0 * 0.75, fill.1 * 0.75, fill.2 * 0.75),
+                                               fill: fill, width: 0.5, dash: nil)
+                    return overlay
+                }
             }
         }
         cells = pieces.map(\.placed).reduce(0, +)
