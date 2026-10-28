@@ -11,6 +11,10 @@
 //
 // Tiles are drawn in their image's main colour. Point objects with a name become
 // places, labelled on the map, with their description property shown when tapped.
+//
+// The folder can also hold hex corridors: GeoJSON whose features carry an "h3" cell
+// index and optionally a "fill" colour, as tools/hexchain.c writes them. They join
+// places too far apart for one flat map, such as two maps on different continents.
 // Nothing is saved: the layer is gone when the app closes.
 
 import CH3
@@ -28,7 +32,7 @@ enum TiledImportError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noMap: "That folder has no Tiled map (.tmj) in it."
+        case .noMap: "That folder has no Tiled map (.tmj) or hex corridor (.geojson) in it."
         case .notHexagonal: "Only hexagonal Tiled maps can go on the globe."
         case .noOrigin:
             "The map doesn't say where it goes. Give it an origin_cell property, or centre_latitude, centre_longitude and h3_resolution."
@@ -47,33 +51,90 @@ struct TiledOverlayMap: Identifiable {
 
     let id = UUID()
     let name: String
-    let resolution: Int
+    /// The H3 resolutions of the maps and corridors, finest last.
+    let resolutions: [Int]
     /// The tiles as cell outlines, one overlay per colour and region.
     let areas: [StyledAreas]
     /// The places' names, drawn like the base map's place names.
     let labels: Places
     let landmarks: [CellID: Landmark]
     let cells: Int
-    /// Painted tiles H3 couldn't place around the origin (too far, or across a pentagon).
+    /// Painted tiles H3 couldn't place around their origin (too far, or across a pentagon).
     let leftOut: Int
     let bounds: MKMapRect
+
+    /// What one map or corridor adds.
+    private struct Piece {
+        var resolution = 0
+        var polygons: [Int: [MKPolygon]] = [:]
+        var landmarks: [CellID: Landmark] = [:]
+        var names: [Place] = []
+        var placed = 0
+        var missed = 0
+    }
 
     /// The landmark in the hexagon at `coordinate`, if any.
     func landmark(at coordinate: CLLocationCoordinate2D) -> Landmark? {
         var point = LatLng(lat: degsToRads(coordinate.latitude), lng: degsToRads(coordinate.longitude))
-        var cell: H3Index = 0
-        guard latLngToCell(&point, Int32(resolution), &cell) == 0 else { return nil }
-        return landmarks[cell]
+        for resolution in resolutions.reversed() {
+            var cell: H3Index = 0
+            guard latLngToCell(&point, Int32(resolution), &cell) == 0 else { continue }
+            if let landmark = landmarks[cell] { return landmark }
+        }
+        return nil
     }
 
-    /// Reads the first .tmj in `folder`. Call off the main thread: it lays out thousands of cells.
+    /// Reads every .tmj and .geojson in `folder`. Call off the main thread: it lays out
+    /// thousands of cells.
     init(folder: URL, backend: H3Backend) throws {
         let scoped = folder.startAccessingSecurityScopedResource()
         defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
-        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-        guard let file = files.filter({ $0.pathExtension == "tmj" }).sorted(by: { $0.path < $1.path }).first else {
-            throw TiledImportError.noMap
+        let files = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
+            .sorted { $0.path < $1.path }
+        let maps = files.filter { $0.pathExtension == "tmj" }, corridors = files.filter { $0.pathExtension == "geojson" }
+        guard !maps.isEmpty || !corridors.isEmpty else { throw TiledImportError.noMap }
+        let pieces = try maps.map { try Self.map($0, folder: folder, backend: backend) } + corridors.compactMap(Self.corridor)
+        var byColour: [Int: [MKPolygon]] = [:]
+        for piece in pieces { byColour.merge(piece.polygons) { $0 + $1 } }
+        guard !byColour.isEmpty else { throw TiledImportError.nothingPlaced }
+        areas = byColour.flatMap { rgb, polygons in
+            let fill = (CGFloat(rgb >> 16 & 0xFF) / 255, CGFloat(rgb >> 8 & 0xFF) / 255, CGFloat(rgb & 0xFF) / 255)
+            return groupedByRegion(polygons).map { group in
+                let overlay = StyledAreas(group)
+                overlay.style = LayerStyle(kind: .fill, stroke: (fill.0 * 0.75, fill.1 * 0.75, fill.2 * 0.75), fill: fill,
+                                           width: 0.5, dash: nil)
+                return overlay
+            }
         }
+        cells = pieces.map(\.placed).reduce(0, +)
+        leftOut = pieces.map(\.missed).reduce(0, +)
+        bounds = areas.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
+        landmarks = pieces.reduce(into: [:]) { all, piece in all.merge(piece.landmarks) { first, _ in first } }
+        labels = Places(pieces.flatMap(\.names))
+        resolutions = Set(pieces.map(\.resolution)).sorted()
+        name = folder.lastPathComponent
+    }
+
+    /// One hex corridor: each feature's "h3" cell, in its "fill" colour (#rrggbb).
+    private static func corridor(_ file: URL) -> Piece? {
+        guard let data = try? Data(contentsOf: file),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [[String: Any]] else { return nil }
+        var piece = Piece()
+        for feature in features {
+            let properties = feature["properties"] as? [String: Any] ?? [:]
+            guard let name = properties["h3"] as? String, let cell = CellID(name, radix: 16), isValidCell(cell) != 0,
+                  let polygon = cellPolygon(cell) else { continue }
+            let fill = (properties["fill"] as? String).flatMap { Int($0.dropFirst(), radix: 16) } ?? 0xC8553D
+            piece.polygons[fill, default: []].append(polygon)
+            piece.resolution = Int(getResolution(cell))
+            piece.placed += 1
+        }
+        return piece.placed > 0 ? piece : nil
+    }
+
+    /// One Tiled map, placed where its properties say.
+    private static func map(_ file: URL, folder: URL, backend: H3Backend) throws -> Piece {
         let json: [String: Any]
         do {
             json = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any] ?? [:]
@@ -104,7 +165,7 @@ struct TiledOverlayMap: Identifiable {
         } else {
             throw TiledImportError.noOrigin
         }
-        resolution = Int(getResolution(origin))
+        let resolution = Int(getResolution(origin))
 
         let layers = json["layers"] as? [[String: Any]] ?? []
         let objects = layers.filter { $0["type"] as? String == "objectgroup" && $0["visible"] as? Bool != false }
@@ -178,33 +239,18 @@ struct TiledOverlayMap: Identifiable {
             }
         }
         let colours = Self.tileColours(json["tilesets"], folder: folder)
-        var byColour: [Int: [MKPolygon]] = [:]
-        var placed = 0, missed = 0
+        var piece = Piece(resolution: resolution)
         for (index, gid) in gids.enumerated() where gid != 0 {
             guard let cell = cellAt[index], let polygon = cellPolygon(cell) else {
-                missed += 1
+                piece.missed += 1
                 continue
             }
-            byColour[colours[gid] ?? 0x9A9A9A, default: []].append(polygon)
-            placed += 1
+            piece.polygons[colours[gid] ?? 0x9A9A9A, default: []].append(polygon)
+            piece.placed += 1
         }
-        guard placed > 0 else { throw TiledImportError.nothingPlaced }
-        areas = byColour.flatMap { rgb, polygons in
-            let fill = (CGFloat(rgb >> 16 & 0xFF) / 255, CGFloat(rgb >> 8 & 0xFF) / 255, CGFloat(rgb & 0xFF) / 255)
-            return groupedByRegion(polygons).map { group in
-                let overlay = StyledAreas(group)
-                overlay.style = LayerStyle(kind: .fill, stroke: (fill.0 * 0.75, fill.1 * 0.75, fill.2 * 0.75), fill: fill,
-                                           width: 0.5, dash: nil)
-                return overlay
-            }
-        }
-        cells = placed
-        leftOut = missed
-        bounds = areas.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
+        guard piece.placed > 0 else { throw TiledImportError.nothingPlaced }
 
         // Named points are places; text objects are only labels for Tiled's own view.
-        var landmarks: [CellID: Landmark] = [:]
-        var names: [Place] = []
         for object in objects where object["text"] == nil {
             guard let name = object["name"] as? String, !name.isEmpty,
                   let x = Self.number(object["x"]), let y = Self.number(object["y"]) else { continue }
@@ -212,15 +258,13 @@ struct TiledOverlayMap: Identifiable {
             guard (0..<width).contains(at.column), (0..<height).contains(at.row),
                   let cell = cellAt[at.row * width + at.column] else { continue }
             let description = Self.properties(object["properties"])["description"] as? String ?? ""
-            landmarks[cell] = Landmark(name: name, description: description, cell: cell)
+            piece.landmarks[cell] = Landmark(name: name, description: description, cell: cell)
             var centre = LatLng()
             guard cellToLatLng(cell, &centre) == 0 else { continue }
             let point = MKMapPoint(CLLocationCoordinate2D(latitude: radsToDegs(centre.lat), longitude: radsToDegs(centre.lng)))
-            names.append(Place(point: point, name: name, tier: 0))
+            piece.names.append(Place(point: point, name: name, tier: 0))
         }
-        self.landmarks = landmarks
-        labels = Places(names)
-        name = file.deletingPathExtension().lastPathComponent
+        return piece
     }
 
     /// Tiled's property list as a dictionary.
