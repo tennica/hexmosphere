@@ -68,6 +68,8 @@ struct TiledOverlayMap: Identifiable {
     /// Objects whose h3 property names a different cell from the one their tile landed on
     /// (an export, or an authored planet that carries its cells): 0 when the layout round-trips.
     let mismatched: Int
+    /// Whether every map in it says it's authored, not real (map property fictional = true).
+    let fictional: Bool
     let bounds: MKMapRect
 
     struct Route {
@@ -85,6 +87,7 @@ struct TiledOverlayMap: Identifiable {
         var placed = 0
         var missed = 0
         var mismatched = 0
+        var fictional = false
     }
 
     /// The landmark in the hexagon at `coordinate`, if any.
@@ -115,6 +118,8 @@ struct TiledOverlayMap: Identifiable {
         cells = pieces.map(\.placed).reduce(0, +)
         leftOut = pieces.map(\.missed).reduce(0, +)
         mismatched = pieces.map(\.mismatched).reduce(0, +)
+        let drawn = pieces.filter { $0.placed > 0 }
+        fictional = !drawn.isEmpty && drawn.allSatisfy { $0.fictional }
         let routeBounds = routes.flatMap(\.points).map { MKMapRect(origin: MKMapPoint($0), size: MKMapSize(width: 0, height: 0)) }
         bounds = (areas.map(\.boundingMapRect) + routeBounds).reduce(MKMapRect.null) { $0.union($1) }
         landmarks = pieces.reduce(into: [:]) { all, piece in all.merge(piece.landmarks) { first, _ in first } }
@@ -306,6 +311,7 @@ struct TiledOverlayMap: Identifiable {
         }
         let colours = Self.tileColours(json["tilesets"], folder: folder)
         var piece = Piece(resolution: resolution)
+        piece.fictional = properties["fictional"] as? Bool ?? false
         for (index, gid) in gids.enumerated() where gid != 0 {
             guard let cell = cellAt[index], let polygon = cellPolygon(cell) else {
                 piece.missed += 1
