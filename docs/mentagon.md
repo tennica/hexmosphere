@@ -8,7 +8,7 @@ Here the Mentagon becomes the first real world built from H3: a starter planet t
 
 ## Built from an empty pentagon
 
-H3 has twelve pentagons at every resolution, each centred on the same twelve points. Most sit over open ocean, but the coarse ones are huge: ten of the twelve resolution 0 pentagons contain some land, and two still do at resolution 3. From resolution 4 down, none do.
+H3 has twelve pentagons at every resolution, each centred on the same twelve points. Most sit over open ocean, but the coarse ones are huge: ten of the twelve resolution 0 pentagons contain some land, two still do at resolutions 3 and 4, and one at 5. From resolution 6 down, none do. (Natural Earth 1:10m land and minor islands, counting any cell that touches land; `scripts/pentaland.py` reruns it.)
 
 The Mentagon is base cell 72, the pentagon in the South Pacific whose whole resolution 0 cell holds no land:
 
@@ -20,7 +20,7 @@ The Mentagon is base cell 72, the pentagon in the South Pacific whose whole reso
 
 The resolution 4 pentagon is about half the area of an average resolution 4 hexagon, and its 41 rooms cover the same 897 km². The nearest land is Ducie Island,[^ducie] about 1,600 km away, measured against [Natural Earth](https://www.naturalearthdata.com) 1:10m land and minor islands (public domain). The patch uses no basemap tiles and no place names.
 
-[^ducie]: Ducie Island, an uninhabited atoll about 470 km east of Pitcairn, was first sighted in 1606 by Pedro Fernandes de Queirós, who called it Luna Puesta. Captain Edward Edwards of HMS *Pandora* came upon it again in March 1791 while hunting the *Bounty* mutineers (who, unknown to him, had settled on Pitcairn), and named it after Captain Francis Reynolds-Moreton, 3rd Baron Ducie, under whom he had served in HMS *Augusta*. It's said "DOO-see", which to some ears comes out close to "duchy": fitting for a lord's name on a far corner of a British Overseas Territory, the Pitcairn Islands. A lord's name on a speck of land alone in open sea would sit well in *One Piece*.
+[^ducie]: Ducie Island, an uninhabited atoll about 535 km east of Pitcairn, was first sighted in 1606 by Pedro Fernandes de Queirós, who called it Luna Puesta. Captain Edward Edwards of HMS *Pandora* came upon it again in March 1791 while hunting the *Bounty* mutineers (who, unknown to him, had settled on Pitcairn), and named it after Captain Francis Reynolds-Moreton, 3rd Baron Ducie, under whom he had served in HMS *Augusta*. It's said "DOO-see", which to some ears comes out close to "duchy": fitting for a lord's name on a far corner of a British Overseas Territory, the Pitcairn Islands. A lord's name on a speck of land alone in open sea would sit well in *One Piece*.
 
 ## Five sides at every level
 
