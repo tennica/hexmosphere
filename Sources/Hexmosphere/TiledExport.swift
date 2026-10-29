@@ -38,12 +38,15 @@ struct TiledMapDocument: FileDocument {
 enum TiledExportError: LocalizedError {
     case nothingInView
     case tooLarge(Int, Int)
+    case noSuchMentagon(Int)
 
     var errorDescription: String? {
         switch self {
         case .nothingInView: "No hexagons in view to export. Move the map over some."
         case .tooLarge(let width, let height):
             "The area in view is \(width) × \(height) hexagons, too large for one Tiled map. Zoom in or pick a larger cell size."
+        case .noSuchMentagon(let resolution):
+            "There's no Mentagon at resolution \(resolution): only 4 (the Mentagon) and 1 (the BigMentagon)."
         }
     }
 }
@@ -87,6 +90,7 @@ struct TiledExport {
     /// map: a pentagon can't lie flat, and its missing direction opens a seam. At resolution 1
     /// it's the BigMentagon: the same 41 rooms, at resolution 3, the HeusDenVerSe's size.
     static func mentagon(backend: H3Backend, resolution: Int = 4) throws -> TiledExport {
+        guard resolution == 4 || resolution == 1 else { throw TiledExportError.noSuchMentagon(resolution) }
         let base: CellID = 0x8091fffffffffff
         guard let mentagon = centreChild(of: base, at: resolution), let origin = centreChild(of: mentagon, at: resolution + 2),
               let centre = middle(of: origin, backend: backend)?.coordinate else { throw TiledExportError.nothingInView }
