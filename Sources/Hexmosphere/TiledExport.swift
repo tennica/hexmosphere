@@ -84,16 +84,18 @@ struct TiledExport {
     /// The Mentagon (docs/mentagon.md): base cell 72's pentagon at resolution 4, open ocean, as
     /// its 41 rooms at resolution 6 in 6 regions at resolution 5, with the pentagon room as
     /// origin. Nothing in it has photos. Five neighbouring pairs of rooms don't touch on the
-    /// map: a pentagon can't lie flat, and its missing direction opens a seam.
-    static func mentagon(backend: H3Backend) throws -> TiledExport {
+    /// map: a pentagon can't lie flat, and its missing direction opens a seam. At resolution 1
+    /// it's the BigMentagon: the same 41 rooms, at resolution 3, the HeusDenVerSe's size.
+    static func mentagon(backend: H3Backend, resolution: Int = 4) throws -> TiledExport {
         let base: CellID = 0x8091fffffffffff
-        guard let mentagon = centreChild(of: base, at: 4), let origin = centreChild(of: mentagon, at: 6),
+        guard let mentagon = centreChild(of: base, at: resolution), let origin = centreChild(of: mentagon, at: resolution + 2),
               let centre = middle(of: origin, backend: backend)?.coordinate else { throw TiledExportError.nothingInView }
-        let rooms = children(of: mentagon, at: 6).compactMap { id -> (CellSummary, MKMapPoint)? in
+        let rooms = children(of: mentagon, at: resolution + 2).compactMap { id -> (CellSummary, MKMapPoint)? in
             middle(of: id, backend: backend).map { (CellSummary(id: id), $0) }
         }
-        return try TiledExport(places: rooms, value: { $0.samples }, top: 0, resolution: 6, regionResolution: 5,
-                               backend: backend, origin: origin, centre: centre, name: "Mentagon", fictional: true)
+        return try TiledExport(places: rooms, value: { $0.samples }, top: 0, resolution: resolution + 2,
+                               regionResolution: resolution + 1, backend: backend, origin: origin, centre: centre,
+                               name: resolution == 4 ? "Mentagon" : "BigMentagon", fictional: true)
     }
 
     /// The middle of a cell's outline, as a map point.

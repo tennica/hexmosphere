@@ -125,8 +125,8 @@ struct ContentView: View {
         // For testing: launching with -vintage <layer id> starts with that layer on,
         // -drive <route id> (e.g. route-66) starts that demo drive, and -export-mentagon
         // <folder> writes the Mentagon's Tiled map (docs/mentagon.md) to that folder in the
-        // app's Documents, inside its container on macOS; -open-tiled <folder> opens the Tiled
-        // map in that folder there.
+        // app's Documents, inside its container on macOS (-mentagon-resolution 1 for the
+        // BigMentagon); -open-tiled <folder> opens the Tiled map in that folder there.
         .task {
             if let folder = UserDefaults.standard.string(forKey: "open-tiled") {
                 openTiled(URL.documentsDirectory.appending(path: URL(fileURLWithPath: folder).lastPathComponent))
@@ -135,7 +135,9 @@ struct ContentView: View {
                 // Only the last part of the name, so it stays in Documents.
                 let url = URL.documentsDirectory.appending(path: URL(fileURLWithPath: folder).lastPathComponent)
                 do {
-                    try TiledExport.mentagon(backend: backend).document.folder
+                    let defaults = UserDefaults.standard  // a launch argument arrives as a string; integer(forKey:) reads it
+                    let resolution = defaults.object(forKey: "mentagon-resolution") == nil ? 4 : defaults.integer(forKey: "mentagon-resolution")
+                    try TiledExport.mentagon(backend: backend, resolution: resolution).document.folder
                         .write(to: url, options: .atomic, originalContentsURL: nil)
                     print("Mentagon written to \(url.path)")
                 } catch {
