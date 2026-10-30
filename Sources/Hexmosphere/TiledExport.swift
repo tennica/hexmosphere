@@ -98,9 +98,11 @@ struct TiledExport {
         guard let size = [4: "Mentagon", 1: "BigMentagon", 0: "JumboMentagon"][resolution] else {
             throw TiledExportError.noSuchMentagon(resolution)
         }
+        // Checked before the conversion: CellID is unsigned, and a negative base cell would trap.
+        guard (0..<122).contains(baseCell) else { throw TiledExportError.notAPentagon(baseCell) }
         // Base cell n's index at resolution 0: mode 1, resolution 0, n in bits 45 to 51.
         let base: CellID = 0x8001fffffffffff | CellID(baseCell) << 45
-        guard (0..<122).contains(baseCell), isPentagonCell(base) else { throw TiledExportError.notAPentagon(baseCell) }
+        guard isPentagonCell(base) else { throw TiledExportError.notAPentagon(baseCell) }
         guard let mentagon = centreChild(of: base, at: resolution), let origin = centreChild(of: mentagon, at: resolution + 2),
               let centre = middle(of: origin, backend: backend)?.coordinate else { throw TiledExportError.nothingInView }
         let rooms = children(of: mentagon, at: resolution + 2).compactMap { id -> (CellSummary, MKMapPoint)? in
