@@ -436,3 +436,65 @@ struct TiledOverlayMap: Identifiable {
         return colours
     }
 }
+
+// The Mentagons drawn straight from H3, with no files: each size's 41 rooms coloured by
+// region, as the maps made from the Mentagon export are, and the pentagon room named.
+extension TiledOverlayMap {
+    /// Each Mentagon size's pentagon resolution; its rooms are two finer.
+    static let mentagonSizes = [(0, "JumboMentagon"), (1, "BigMentagon"), (4, "Mentagon")]
+    /// H3's twelve base pentagons, by base cell number.
+    static let pentagonBases = [4, 14, 24, 38, 49, 58, 63, 72, 83, 97, 107, 117]
+
+    /// Every size of Mentagon around each base pentagon in `bases`, coarsest first so the
+    /// finer draw on top. Each size is its own resolution, so Tiled Layers hides it.
+    init(mentagonsAround bases: [Int], name: String) {
+        var pieces: [Piece] = []
+        for (resolution, size) in Self.mentagonSizes {
+            for baseCell in bases {
+                let base: CellID = 0x8001fffffffffff | CellID(baseCell) << 45
+                if let piece = Self.mentagon(base: base, resolution: resolution, title: "\(size) \(baseCell)") {
+                    pieces.append(piece)
+                }
+            }
+        }
+        self.init(pieces: pieces, name: name, opening: UUID())
+    }
+
+    private static func mentagon(base: CellID, resolution: Int, title: String) -> Piece? {
+        guard isPentagonCell(base), let pentagon = centreChild(of: base, at: resolution),
+              let room = centreChild(of: pentagon, at: resolution + 2) else { return nil }
+        // The centre region, then the five around it clockwise from north (make.py's colours).
+        let colours = [0x3468A8, 0x288496, 0x469678, 0x6078B0, 0x7864A0, 0x3C5A8C], landing = 0xECC45C
+        let centre = Self.latLng(pentagon)
+        let regions = children(of: pentagon, at: resolution + 1).sorted { a, b in
+            a != b && (a == pentagon || b != pentagon && Self.bearing(from: centre, to: Self.latLng(a)) < Self.bearing(from: centre, to: Self.latLng(b)))
+        }
+        var piece = Piece(resolution: resolution + 2)
+        piece.fictional = true
+        for (index, region) in regions.enumerated() {
+            for cell in children(of: region, at: resolution + 2) {
+                guard let polygon = cellPolygon(cell) else { piece.missed += 1; continue }
+                piece.polygons[cell == room ? landing : colours[index % colours.count], default: []].append(polygon)
+                piece.placed += 1
+            }
+        }
+        let description = "Base cell \(getBaseCellNumber(base))'s pentagon at resolution \(resolution): five ways out, where a sixth would be on any other hex."
+        piece.landmarks[room] = Landmark(name: title, description: description, cell: room)
+        let at = Self.latLng(room)
+        piece.names.append(Place(point: MKMapPoint(CLLocationCoordinate2D(latitude: at.latitude, longitude: at.longitude)), name: title, tier: 0))
+        return piece.placed > 0 ? piece : nil
+    }
+
+    private static func latLng(_ cell: CellID) -> (latitude: Double, longitude: Double) {
+        var centre = LatLng()
+        _ = cellToLatLng(cell, &centre)
+        return (radsToDegs(centre.lat), radsToDegs(centre.lng))
+    }
+
+    /// Compass bearing in degrees, 0 at north, clockwise.
+    private static func bearing(from a: (latitude: Double, longitude: Double), to b: (latitude: Double, longitude: Double)) -> Double {
+        let la1 = degsToRads(a.latitude), la2 = degsToRads(b.latitude), dl = degsToRads(b.longitude - a.longitude)
+        let angle = atan2(sin(dl) * cos(la2), cos(la1) * sin(la2) - sin(la1) * cos(la2) * cos(dl))
+        return (radsToDegs(angle) + 360).truncatingRemainder(dividingBy: 360)
+    }
+}

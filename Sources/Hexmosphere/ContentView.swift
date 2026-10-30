@@ -46,6 +46,7 @@ struct ContentView: View {
                     toolbarControls
                     Spacer()
                     tiledButton
+                    mentagonsMenu
                     exportButton
                 }
                 compactToolbar { sizePicker.pickerStyle(.segmented).fixedSize() }
@@ -130,7 +131,8 @@ struct ContentView: View {
         // <folder> writes the Mentagon's Tiled map (docs/mentagon.md) to that folder in the
         // app's Documents, inside its container on macOS (-mentagon-resolution 1 for the
         // BigMentagon, 0 for the JumboMentagon; -mentagon-base <n> for base pentagon n's
-        // instead of 72's); -open-tiled <folder> opens the Tiled map in that folder there.
+        // instead of 72's); -open-tiled <folder> opens the Tiled map in that folder there;
+        // -mentagons 72 or all shows the built-in Mentagons around base 72 or every pentagon.
         .task {
             if let folder = UserDefaults.standard.string(forKey: "open-tiled") {
                 openTiled(URL.documentsDirectory.appending(path: URL(fileURLWithPath: folder).lastPathComponent))
@@ -148,6 +150,14 @@ struct ContentView: View {
                 } catch {
                     print("Mentagon not written: \(error.localizedDescription)")
                 }
+            }
+            if let which = UserDefaults.standard.string(forKey: "mentagons") {
+                if which == "all" {
+                    showMentagons(around: TiledOverlayMap.pentagonBases, name: "All Mentagons")
+                } else {
+                    showMentagons(around: [72], name: "Mentagons")
+                }
+                print(tiledNote ?? "")
             }
             if let id = UserDefaults.standard.string(forKey: "vintage") {
                 vintage = VintageLayer.all.first { $0.id == id }
@@ -214,6 +224,7 @@ struct ContentView: View {
             driveButton.labelStyle(.iconOnly)
             vintageMenu.labelStyle(.iconOnly)
             tiledButton.labelStyle(.iconOnly)
+            mentagonsMenu.labelStyle(.iconOnly)
             exportButton.labelStyle(.iconOnly)
         }
         .frame(maxWidth: .infinity)
@@ -283,6 +294,25 @@ struct ContentView: View {
         Button { exportTiled() } label: { Label("Export Tiled…", systemImage: "square.and.arrow.up") }
             .disabled(binned.cells.isEmpty)
             .help("Save the hexagons in view as a Tiled map (a folder with hexmosphere.tmj), with each hexagon as a place to name.")
+    }
+
+    /// The Mentagons (docs/mentagon.md), drawn from H3 with no files, in place of any open
+    /// Tiled map. All three sizes come at once; Tiled Layers hides the ones not wanted.
+    private var mentagonsMenu: some View {
+        Menu {
+            Button("Base Cell 72's") { showMentagons(around: [72], name: "Mentagons") }
+            Button("All Twelve Pentagons'") { showMentagons(around: TiledOverlayMap.pentagonBases, name: "All Mentagons") }
+        } label: { Label("Mentagons", systemImage: "pentagon") }
+            .help("Show the JumboMentagon, BigMentagon and Mentagon around one pentagon or all twelve. They're made up: open ocean, or real land with no places on it.")
+    }
+
+    private func showMentagons(around bases: [Int], name: String) {
+        let map = TiledOverlayMap(mentagonsAround: bases, name: name)
+        tiled = map
+        tiledAll = map
+        hiddenResolutions = []
+        landmark = nil
+        tiledNote = "\(name) (fictional): \(map.cells.formatted()) hexagons at res \(map.resolutions.map(String.init).joined(separator: ", ")). Tiled Layers shows or hides each size."
     }
 
     /// Opens a Tiled map onto the globe, or closes the one that's open.
