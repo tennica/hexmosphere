@@ -486,14 +486,14 @@ extension TiledOverlayMap {
         return piece.placed > 0 ? piece : nil
     }
 
-    private static func latLng(_ cell: CellID) -> (latitude: Double, longitude: Double) {
+    static func latLng(_ cell: CellID) -> (latitude: Double, longitude: Double) {
         var centre = LatLng()
         _ = cellToLatLng(cell, &centre)
         return (radsToDegs(centre.lat), radsToDegs(centre.lng))
     }
 
     /// Compass bearing in degrees, 0 at north, clockwise.
-    private static func bearing(from a: (latitude: Double, longitude: Double), to b: (latitude: Double, longitude: Double)) -> Double {
+    static func bearing(from a: (latitude: Double, longitude: Double), to b: (latitude: Double, longitude: Double)) -> Double {
         let la1 = degsToRads(a.latitude), la2 = degsToRads(b.latitude), dl = degsToRads(b.longitude - a.longitude)
         let angle = atan2(sin(dl) * cos(la2), cos(la1) * sin(la2) - sin(la1) * cos(la2) * cos(dl))
         return (radsToDegs(angle) + 360).truncatingRemainder(dividingBy: 360)

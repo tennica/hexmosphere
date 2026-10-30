@@ -110,7 +110,27 @@ struct TiledExport {
         }
         return try TiledExport(places: rooms, value: { $0.samples }, top: 0, resolution: resolution + 2,
                                regionResolution: resolution + 1, backend: backend, origin: origin, centre: centre,
-                               name: baseCell == 72 ? size : "\(size) \(baseCell)", fictional: true)
+                               name: baseCell == 72 ? size : "\(size) \(baseCell)", fictional: true,
+                               roomNames: roomNames(pentagon: mentagon, resolution: resolution))
+    }
+
+    /// Each Mentagon room's region name and its number in that region, for a converter to name
+    /// rooms nobody has visited ("North-east Sea, room 3"). The middle region is the Centre Sea;
+    /// the other five take the compass point nearest their bearing from the pentagon, which is
+    /// unique since they're 72 degrees apart. Rooms count from 1 in H3's child order.
+    private static func roomNames(pentagon: CellID, resolution: Int) -> [CellID: (region: String, room: Int)] {
+        guard let middle = centreChild(of: pentagon, at: resolution + 1) else { return [:] }
+        let points = ["North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]
+        let centre = TiledOverlayMap.latLng(pentagon)
+        var names: [CellID: (region: String, room: Int)] = [:]
+        for region in children(of: pentagon, at: resolution + 1) {
+            let bearing = TiledOverlayMap.bearing(from: centre, to: TiledOverlayMap.latLng(region))
+            let name = region == middle ? "Centre Sea" : "\(points[Int((bearing / 45).rounded()) % 8]) Sea"
+            for (index, room) in children(of: region, at: resolution + 2).enumerated() {
+                names[room] = (name, index + 1)
+            }
+        }
+        return names
     }
 
     /// The middle of a cell's outline, as a map point.
@@ -123,7 +143,7 @@ struct TiledExport {
 
     private init(places: [(CellSummary, MKMapPoint)], value: (CellSummary) -> Int, top: Int, resolution: Int,
                  regionResolution: Int, backend: H3Backend, origin: CellID, centre: CLLocationCoordinate2D,
-                 name: String, fictional: Bool) throws {
+                 name: String, fictional: Bool, roomNames: [CellID: (region: String, room: Int)] = [:]) throws {
         var placed: [(cell: CellSummary, point: MKMapPoint, i: Int, j: Int)] = []
         var leftOut = 0
         for (cell, point) in places {
@@ -163,6 +183,10 @@ struct TiledExport {
             }
             if isPentagonCell(place.cell.id) {
                 properties.append(Self.property("pentagon", "bool", true))
+            }
+            if let named = roomNames[place.cell.id] {
+                properties.append(Self.property("region_name", "string", named.region))
+                properties.append(Self.property("region_room", "int", named.room))
             }
             objects.append([
                 "id": index + 1, "name": "", "type": "h3cell",
