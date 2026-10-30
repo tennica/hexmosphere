@@ -84,7 +84,8 @@ struct TiledExport {
         // Regions are the app's next cell size up, as in docs/inform.md.
         try self.init(places: inView, value: binned.value, top: top, resolution: size.rawValue,
                       regionResolution: max(0, size.rawValue - 2), backend: backend, origin: origin, centre: centre,
-                      name: "Hexmosphere res \(size.rawValue) \(stamp.string(from: Date()))", fictional: false)
+                      name: "Hexmosphere res \(size.rawValue) \(stamp.string(from: Date()))", fictional: false,
+                      content: "visits")
     }
 
     /// The Mentagon (docs/mentagon.md): base cell 72's pentagon at resolution 4, open ocean, as
@@ -111,7 +112,7 @@ struct TiledExport {
         return try TiledExport(places: rooms, value: { $0.samples }, top: 0, resolution: resolution + 2,
                                regionResolution: resolution + 1, backend: backend, origin: origin, centre: centre,
                                name: baseCell == 72 ? size : "\(size) \(baseCell)", fictional: true,
-                               roomNames: roomNames(pentagon: mentagon, resolution: resolution))
+                               content: "fictional", roomNames: roomNames(pentagon: mentagon, resolution: resolution))
     }
 
     /// Each Mentagon room's region name and its number in that region, for a converter to name
@@ -143,7 +144,8 @@ struct TiledExport {
 
     private init(places: [(CellSummary, MKMapPoint)], value: (CellSummary) -> Int, top: Int, resolution: Int,
                  regionResolution: Int, backend: H3Backend, origin: CellID, centre: CLLocationCoordinate2D,
-                 name: String, fictional: Bool, roomNames: [CellID: (region: String, room: Int)] = [:]) throws {
+                 name: String, fictional: Bool, content: String,
+                 roomNames: [CellID: (region: String, room: Int)] = [:]) throws {
         var placed: [(cell: CellSummary, point: MKMapPoint, i: Int, j: Int)] = []
         var leftOut = 0
         for (cell, point) in places {
@@ -207,6 +209,9 @@ struct TiledExport {
                 // Whether it holds no real places: true for the Mentagon, false for photos, so
                 // tools downstream (inform-federation's converter) never have to guess.
                 Self.property("fictional", "bool", fictional),
+                // What its places carry, so a converter picks its style without guessing: "visits"
+                // (photo days and dates) or "fictional" (region names and rooms, the Mentagon's).
+                Self.property("content", "string", content),
                 Self.property("h3_resolution", "int", resolution),
                 Self.property("region_resolution", "int", regionResolution),
                 Self.property("h3_backend", "string", backend.name),
