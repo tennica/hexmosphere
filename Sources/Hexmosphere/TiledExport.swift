@@ -39,6 +39,7 @@ enum TiledExportError: LocalizedError {
     case nothingInView
     case tooLarge(Int, Int)
     case noSuchMentagon(Int)
+    case notAPentagon(Int)
 
     var errorDescription: String? {
         switch self {
@@ -46,7 +47,9 @@ enum TiledExportError: LocalizedError {
         case .tooLarge(let width, let height):
             "The area in view is \(width) × \(height) hexagons, too large for one Tiled map. Zoom in or pick a larger cell size."
         case .noSuchMentagon(let resolution):
-            "There's no Mentagon at resolution \(resolution): only 4 (the Mentagon) and 1 (the BigMentagon)."
+            "There's no Mentagon at resolution \(resolution): only 4 (the Mentagon), 1 (the BigMentagon) and 0 (the JumboMentagon)."
+        case .notAPentagon(let base):
+            "Base cell \(base) isn't one of H3's twelve pentagons, so it has no Mentagon."
         }
     }
 }
@@ -88,10 +91,16 @@ struct TiledExport {
     /// its 41 rooms at resolution 6 in 6 regions at resolution 5, with the pentagon room as
     /// origin. Nothing in it has photos. Five neighbouring pairs of rooms don't touch on the
     /// map: a pentagon can't lie flat, and its missing direction opens a seam. At resolution 1
-    /// it's the BigMentagon: the same 41 rooms, at resolution 3, the HeusDenVerSe's size.
-    static func mentagon(backend: H3Backend, resolution: Int = 4) throws -> TiledExport {
-        guard resolution == 4 || resolution == 1 else { throw TiledExportError.noSuchMentagon(resolution) }
-        let base: CellID = 0x8091fffffffffff
+    /// it's the BigMentagon: the same 41 rooms, at resolution 3, the HeusDenVerSe's size; at
+    /// resolution 0, the JumboMentagon, at resolution 2. Any of the other eleven base pentagons
+    /// can stand in for base cell 72, for a Mentagon of its own.
+    static func mentagon(backend: H3Backend, resolution: Int = 4, baseCell: Int = 72) throws -> TiledExport {
+        guard let size = [4: "Mentagon", 1: "BigMentagon", 0: "JumboMentagon"][resolution] else {
+            throw TiledExportError.noSuchMentagon(resolution)
+        }
+        // Base cell n's index at resolution 0: mode 1, resolution 0, n in bits 45 to 51.
+        let base: CellID = 0x8001fffffffffff | CellID(baseCell) << 45
+        guard (0..<122).contains(baseCell), isPentagonCell(base) else { throw TiledExportError.notAPentagon(baseCell) }
         guard let mentagon = centreChild(of: base, at: resolution), let origin = centreChild(of: mentagon, at: resolution + 2),
               let centre = middle(of: origin, backend: backend)?.coordinate else { throw TiledExportError.nothingInView }
         let rooms = children(of: mentagon, at: resolution + 2).compactMap { id -> (CellSummary, MKMapPoint)? in
@@ -99,7 +108,7 @@ struct TiledExport {
         }
         return try TiledExport(places: rooms, value: { $0.samples }, top: 0, resolution: resolution + 2,
                                regionResolution: resolution + 1, backend: backend, origin: origin, centre: centre,
-                               name: resolution == 4 ? "Mentagon" : "BigMentagon", fictional: true)
+                               name: baseCell == 72 ? size : "\(size) \(baseCell)", fictional: true)
     }
 
     /// The middle of a cell's outline, as a map point.
