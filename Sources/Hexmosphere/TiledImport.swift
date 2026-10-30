@@ -462,13 +462,14 @@ extension TiledOverlayMap {
 
     private static func mentagon(base: CellID, resolution: Int, title: String) -> Piece? {
         guard isPentagonCell(base), let pentagon = centreChild(of: base, at: resolution),
+              let middle = centreChild(of: pentagon, at: resolution + 1),
               let room = centreChild(of: pentagon, at: resolution + 2) else { return nil }
         // The centre region, then the five around it clockwise from north (make.py's colours).
         let colours = [0x3468A8, 0x288496, 0x469678, 0x6078B0, 0x7864A0, 0x3C5A8C], landing = 0xECC45C
         let centre = Self.latLng(pentagon)
-        let regions = children(of: pentagon, at: resolution + 1).sorted { a, b in
-            a != b && (a == pentagon || b != pentagon && Self.bearing(from: centre, to: Self.latLng(a)) < Self.bearing(from: centre, to: Self.latLng(b)))
-        }
+        // The middle region first: its bearing from the centre it shares is only rounding.
+        let regions = [middle] + children(of: pentagon, at: resolution + 1).filter { $0 != middle }
+            .sorted { Self.bearing(from: centre, to: Self.latLng($0)) < Self.bearing(from: centre, to: Self.latLng($1)) }
         var piece = Piece(resolution: resolution + 2)
         piece.fictional = true
         for (index, region) in regions.enumerated() {
