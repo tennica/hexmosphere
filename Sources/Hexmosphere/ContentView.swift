@@ -29,6 +29,9 @@ struct ContentView: View {
     @State private var vintage: VintageLayer?
     /// An opened Tiled map shown on the globe, and the landmark last tapped on it. Not remembered.
     @State private var tiled: TiledOverlayMap?
+    /// The opened Tiled map with every resolution, and the resolutions hidden from `tiled`.
+    @State private var tiledAll: TiledOverlayMap?
+    @State private var hiddenResolutions: Set<Int> = []
     @State private var landmark: TiledOverlayMap.Landmark?
     @State private var openingTiled = false
     @State private var tiledNote: String?
@@ -295,10 +298,36 @@ struct ContentView: View {
                 Button("Browse…") { openingTiled = true }
             } label: { Label("Open Tiled", systemImage: "map") }
                 .help("Show a hexagonal Tiled map (a folder with a .tmj) on the globe, where its properties say it goes.")
+        } else if let all = tiledAll, all.resolutions.count > 1 {
+            // Maps at more than one resolution (AllMentagons' two sizes, say) can each be hidden.
+            Menu {
+                ForEach(all.resolutions, id: \.self) { resolution in
+                    Toggle(isOn: Binding(get: { !hiddenResolutions.contains(resolution) },
+                                         set: { _ in toggleTiled(resolution) })) {
+                        let maps = all.count(at: resolution)
+                        Text("Res \(resolution) · \(maps) map\(maps == 1 ? "" : "s")")
+                    }
+                }
+                Divider()
+                Button("Close Tiled") { closeTiled() }
+            } label: { Label("Tiled Layers", systemImage: "map.fill") }
+                .help("Show or hide the Tiled maps at each resolution, or take them all off the globe.")
         } else {
-            Button { tiled = nil; landmark = nil; tiledNote = nil } label: { Label("Close Tiled", systemImage: "map.fill") }
+            Button { closeTiled() } label: { Label("Close Tiled", systemImage: "map.fill") }
                 .help("Take the Tiled map off the globe.")
         }
+    }
+
+    private func closeTiled() {
+        tiled = nil; tiledAll = nil; hiddenResolutions = []; landmark = nil; tiledNote = nil
+    }
+
+    /// Hides the opened map's tiles at `resolution`, or shows them again.
+    private func toggleTiled(_ resolution: Int) {
+        guard let all = tiledAll else { return }
+        hiddenResolutions.formSymmetricDifference([resolution])
+        tiled = hiddenResolutions.isEmpty ? all : all.showing(Set(all.resolutions).subtracting(hiddenResolutions))
+        landmark = nil
     }
 
     /// Folders in the app's Documents that hold a Tiled map, by name. Read only; the app writes nothing there.
@@ -320,6 +349,8 @@ struct ContentView: View {
             switch result {
             case .success(let map):
                 tiled = map
+                tiledAll = map
+                hiddenResolutions = []
                 landmark = nil
                 var note = "\(map.name)\(map.fictional ? " (fictional)" : ""): \(map.cells.formatted()) hexagons at res \(map.resolutions.map(String.init).joined(separator: " and ")), \(map.landmarks.count) landmarks"
                 if !map.routes.isEmpty { note += ", \(map.routes.count) route\(map.routes.count == 1 ? "" : "s") at the cell size" }

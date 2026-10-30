@@ -157,10 +157,12 @@ struct HexMapView: PlatformViewRepresentable {
     }
 
     /// Puts an opened Tiled map over the land and under the photos' cells, with its landmarks'
-    /// names on top, replacing the last one only when it changes, and goes there.
+    /// names on top, replacing the last one only when it changes, and goes there when it's
+    /// newly opened (not when some of its resolutions are only hidden or shown).
     private func showTiled(_ map: MKMapView, _ coordinator: Coordinator) {
         defer { showRoutes(map, coordinator) }
         guard coordinator.tiled?.id != tiled?.id else { return }
+        let sameOpening = coordinator.tiled?.opening == tiled?.opening
         if let old = coordinator.tiled {
             map.removeOverlays(old.areas)
             map.removeOverlay(old.labels)
@@ -177,7 +179,9 @@ struct HexMapView: PlatformViewRepresentable {
         }
         map.addOverlay(tiled.labels, level: .aboveLabels)
         let bounds = tiled.bounds, margin = max(bounds.width, bounds.height) * 0.15
-        map.setVisibleMapRect(bounds.insetBy(dx: -margin, dy: -margin), animated: true)
+        if !sameOpening, !bounds.isNull {
+            map.setVisibleMapRect(bounds.insetBy(dx: -margin, dy: -margin), animated: true)
+        }
         let added: [MKOverlay] = tiled.areas + [tiled.labels]
         DispatchQueue.main.async { [weak map] in
             for overlay in added {

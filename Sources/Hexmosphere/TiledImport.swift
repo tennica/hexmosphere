@@ -54,6 +54,8 @@ struct TiledOverlayMap: Identifiable {
     }
 
     let id = UUID()
+    /// The same for every `showing` of one opened folder, so hiding a resolution doesn't move the map.
+    let opening: UUID
     let name: String
     /// The H3 resolutions of the maps and corridors, finest last.
     let resolutions: [Int]
@@ -73,6 +75,8 @@ struct TiledOverlayMap: Identifiable {
     /// Whether every map in it says it's authored, not real (map property fictional = true).
     let fictional: Bool
     let bounds: MKMapRect
+    /// The maps and corridors it was read from, so `showing` can leave some out without reading them again.
+    private let pieces: [Piece]
 
     struct Route {
         let points: [CLLocationCoordinate2D]
@@ -115,6 +119,12 @@ struct TiledOverlayMap: Identifiable {
         // Corridors first, so the maps they join draw over them.
         let pieces = try corridors.compactMap(Self.corridor) + maps.map { try Self.map($0, folder: folder, backend: backend) }
         guard !pieces.isEmpty else { throw TiledImportError.nothingPlaced }
+        self.init(pieces: pieces, name: folder.lastPathComponent, opening: UUID())
+    }
+
+    private init(pieces: [Piece], name: String, opening: UUID) {
+        self.pieces = pieces
+        self.opening = opening
         areas = pieces.flatMap { $0.polygons.flatMap(Self.styled) }
         routes = pieces.flatMap(\.routes)
         cells = pieces.map(\.placed).reduce(0, +)
@@ -128,7 +138,18 @@ struct TiledOverlayMap: Identifiable {
         labels = Places(pieces.flatMap(\.names))
         // A file holding only routes has no resolution of its own: they take the size picker's.
         resolutions = Set(pieces.filter { $0.placed > 0 }.map(\.resolution)).sorted()
-        name = folder.lastPathComponent
+        self.name = name
+    }
+
+    /// The map with only the maps and corridors at the `shown` resolutions. Files of routes
+    /// alone have no resolution and always stay.
+    func showing(_ shown: Set<Int>) -> TiledOverlayMap {
+        TiledOverlayMap(pieces: pieces.filter { $0.placed == 0 || shown.contains($0.resolution) }, name: name, opening: opening)
+    }
+
+    /// How many maps and corridors draw cells at `resolution`.
+    func count(at resolution: Int) -> Int {
+        pieces.filter { $0.placed > 0 && $0.resolution == resolution }.count
     }
 
     /// The routes as the chains of cells they cross at `resolution`, one overlay per colour and region.
