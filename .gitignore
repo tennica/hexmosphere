@@ -14,6 +14,10 @@ Sources/Hexmosphere/Hexmosphere.entitlements
 Sources/HexmosphereiOS/Info.plist
 ios/Sources/Info.plist
 
+# Your own signing team and devices (Config/Signing.local.xcconfig,
+# Config/ios-copies.local): never committed
+Config/*.local*
+
 # The downloaded H3 release (the sources used are in Packages/CH3)
 vendor/
 

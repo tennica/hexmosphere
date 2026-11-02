@@ -1,0 +1,21 @@
+# Named copies of the iPad and iPhone app, for scripts/install-ios.sh.
+#
+# Copy this file to Config/ios-copies.local (git ignores it) and put your own
+# devices and team IDs in. One copy per line, columns separated by spaces:
+#
+#   copy     the name you give install-ios.sh
+#   device   the device's UDID, or its name if the name has no spaces
+#            (both from `xcrun devicectl list devices`)
+#   team     the team ID to sign with (`scripts/install-ios.sh teams` lists them)
+#   icon     normal, or mirrored to tell two copies apart on one device
+#   source   any (whatever is checked out, uncommitted changes included), or
+#            origin (only a clean checkout of exactly origin/main)
+#   groups   names that install several copies at once, comma-separated, or -
+#
+# Two copies on one device need different teams: the team is part of the
+# bundle ID, so each team's build is a separate app.
+
+# copy       device   team        icon      source  groups
+ipad         myipad   8XY9ZW7V6U  normal    any     all
+phone        myphone  8XY9ZW7V6U  normal    origin  all
+phone-test   myphone  AB12CD34EF  mirrored  any     -

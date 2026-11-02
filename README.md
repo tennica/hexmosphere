@@ -85,32 +85,48 @@ One target, `HexmosphereiOS`, builds for both. Its bundle ID includes your team 
 
 1. **An Apple ID in Xcode.** Xcode → Settings → Accounts → **+**. A free Apple ID works; Xcode makes it a "Personal Team".
 2. **The device**, plugged in, unlocked and trusting this Mac, with **Developer Mode** on: Settings → Privacy & Security → Developer Mode, then restart and confirm. The switch only appears after Xcode has seen the device.
-3. **Two values for the commands below:**
-   - **The device's name**, as `xcrun devicectl list devices` shows it (the Name column, for example `rose`). Its UDID from the Identifier column works too.
-   - **Your team ID**, ten letters and digits. It's the `OU` of your "Apple Development" signing certificate, which Xcode creates when you add the Apple ID. This lists one line per certificate:
+3. **Your team ID in `Config/Signing.local.xcconfig`.** The team ID is ten letters and digits. This lists one per Apple ID whose signing certificate is on this Mac (Xcode makes the certificate when you add the Apple ID):
 
-     ```bash
-     security find-certificate -a -c "Apple Development" -p |
-       awk '/BEGIN/{c=""} {c=c $0 "\n"} /END/{cmd="openssl x509 -noout -subject"; printf "%s", c | cmd; close(cmd)}'
-     ```
+   ```bash
+   scripts/install-ios.sh teams
+   ```
 
-     A line looks like `CN=Apple Development: you@example.com (AB12CD34EF), OU=8XY9ZW7V6U, …`. The team ID is the `OU`, **not** the code in brackets after your email. With more than one Apple ID in Xcode there's a line for each; pick the one for the account you signed in with.
+   A line looks like `8XY9ZW7V6U  Apple Development: you@example.com (AB12CD34EF)`. The team ID is the first column, **not** the code in brackets. Then write it into the file, with your team ID in place of `8XY9ZW7V6U`:
 
-Then build and install, putting your device's name and team ID in place of `rose` and `8XY9ZW7V6U`:
+   ```bash
+   echo 'DEVELOPMENT_TEAM = 8XY9ZW7V6U' > Config/Signing.local.xcconfig
+   ```
+
+   Git ignores that file, so your team ID stays out of the repository. The project reads it through `Config/Signing.xcconfig` (committed, with the team left blank), which includes it if it's there. Run `xcodegen generate` once after a fresh clone so the project knows about `Signing.xcconfig`; changing the team later doesn't need it. Without the file, Xcode leaves the team blank and asks you to pick one, and a team picked in Xcode is lost the next time the project is generated.
+
+Xcode's Run (⌘R) now signs with your team. From the command line, a Release build and install, with your device's name from `xcrun devicectl list devices` (or its UDID) in place of `rose`:
 
 ```bash
 xcodebuild -project Hexmosphere.xcodeproj -scheme HexmosphereiOS -configuration Release \
   -destination 'platform=iOS,name=rose' -derivedDataPath build \
-  -allowProvisioningUpdates DEVELOPMENT_TEAM=8XY9ZW7V6U build
+  -allowProvisioningUpdates build
 xcrun devicectl device install app --device rose build/Build/Products/Release-iphoneos/HexmosphereiOS.app
 ```
 
-- `-allowProvisioningUpdates` lets Xcode register the device with your team and make the signing profile. The first build for a new device or team does this, and Xcode may ask for your keychain password.
-- `DEVELOPMENT_TEAM` is passed on the command line because the project leaves it blank, so it isn't tied to one person's account. Builds signed by different teams are different apps on the device, each with its own Photos permission; to update one app from two Macs, sign in to Xcode with the same Apple ID on both.
+- `-allowProvisioningUpdates` lets Xcode register the device with your team and make the signing profile. The first build for a new device or team does this, and Xcode may ask for your keychain password. Later builds reuse the saved profile until it expires.
+- Adding `DEVELOPMENT_TEAM=<team ID>` to the `xcodebuild` line signs with that team instead of the one in the file. Builds signed by different teams are different apps on the device, each with its own Photos permission; to update one app from two Macs, sign in to Xcode with the same Apple ID on both.
 - A Release build is worth it: Debug leaves the H3 C library unoptimised.
 - On first launch the device may refuse an app from an unknown developer. Trust it in Settings → General → VPN & Device Management.
 
 With a free Apple ID ("Personal Team"), an installed build stops launching after about 7 days until it's rebuilt and reinstalled.
+
+#### Several copies on several devices
+
+`scripts/install-ios.sh` builds and installs named copies listed in `Config/ios-copies.local`, which git also ignores. Start from the example, which explains each column:
+
+```bash
+cp Config/ios-copies.example Config/ios-copies.local    # then edit it
+scripts/install-ios.sh list                # the copies, and which devices are reachable
+scripts/install-ios.sh phone               # build and install one copy
+scripts/install-ios.sh all --renew         # a group, each with a fresh 7-day profile
+```
+
+Each line names a device, the team to sign with, the icon (`mirrored` tells two copies apart on one device), and whether the copy takes any local build or only a clean checkout of exactly `origin/main`. Each copy's team is passed to `xcodebuild`, so it doesn't depend on `Signing.local.xcconfig`. A copies file kept elsewhere can be named with `HEXMOSPHERE_IOS_COPIES`.
 
 Earlier versions could also read individual photos chosen with the Photos picker, or files from a folder, without Photos library access. That code was removed once both apps moved to the whole library; it's in the git history.
 

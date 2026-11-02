@@ -1,0 +1,15 @@
+// Signing for the iPad and iPhone app (target HexmosphereiOS).
+//
+// The team is blank here so the project isn't tied to anyone's account.
+// Your own team ID goes in Signing.local.xcconfig, next to this file, which
+// git ignores. It holds one line:
+//
+//     DEVELOPMENT_TEAM = 8XY9ZW7V6U
+//
+// The "?" makes the include optional: without that file the team stays blank
+// and Xcode asks you to pick one. A DEVELOPMENT_TEAM=... passed to xcodebuild
+// on the command line overrides both files. See README, "The iPad and iPhone app".
+
+DEVELOPMENT_TEAM =
+
+#include? "Signing.local.xcconfig"
