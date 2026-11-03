@@ -51,7 +51,8 @@ connected=$(xcrun devicectl list devices 2>/dev/null)
 reachable() {
     local line
     line=$(print -r -- $connected | grep -E "(^$1  | $1 )" | head -1)
-    [[ $line == *available* && $line != *unavailable* ]] || return 1
+    # "available (paired)", or "connected" while a tunnel is already open (e.g. Xcode is debugging on it)
+    [[ ( $line == *available* && $line != *unavailable* ) || $line == *\ connected\ * ]] || return 1
     print -r -- $line | grep -oE '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}|[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -1
 }
 
